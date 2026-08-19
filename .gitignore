@@ -1,0 +1,70 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Code coverage profiles and other test artifacts
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Dependency directories
+vendor/
+node_modules/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Environment files (SENSITIVE)
+.env
+.env.*
+!.env.example
+
+# Databases and data files
+*.db
+*.dat
+*.rdb
+*.sql
+*.dmp
+/tmp/*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor/IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project specific
+.air.toml
+main
+server
+dashboard/dist/
+
+# Agent & AI generated content (SENSITIVE/TRANSIENT)
+.agent/
+.agents/
+.opencode/
+.superpowers/
+AGENTS.md
+/FreddyBot
+Release
+
+# Internal documentation (keep only README.md)
+CHANGELOG.md
+docs/

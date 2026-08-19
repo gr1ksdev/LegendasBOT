@@ -1,0 +1,525 @@
+- name: start
+  type: command
+  text: |
+    <b><tg-emoji emoji-id="5472055112702629499">👋</tg-emoji> Olá, {firstName}!</b>
+    
+    <tg-emoji emoji-id="5372981976804366741">🤖</tg-emoji> Eu estou aqui para automatizar as descrições das suas postagens no Canal!
+    
+    <tg-emoji emoji-id="5472164874886846699">✨</tg-emoji> Com o sistema de <b>Legendas Inteligentes</b>, suas publicações sempre terão descrições personalizadas e organizadas.
+    
+    <tg-emoji emoji-id="5226512880362332956">📖</tg-emoji> Consulte a aba <b>Como Usar</b> para aprender a configurar tudo rapidamente!"
+  buttons:
+    - - text: "Meu Perfil"
+        callback_data: "profile-info"
+        custom_emoji: "5334882760735598374"
+    - - text: "ℹ️ Sobre"
+        callback_data: "about"
+      - text: "🆘 Como Usar"
+        callback_data: "help"
+
+- name: profile-info
+  type: callback
+  text: |
+    <b><tg-emoji emoji-id="5431577498364158238">📊</tg-emoji> Informações da Conta</b>
+    
+    <tg-emoji emoji-id="5370765563226236970">👤</tg-emoji> <b>Usuário:</b> {firstName}
+    🆔 <b>ID:</b> <code>{userId}</code>
+    <tg-emoji emoji-id="5431897022456145283">📆</tg-emoji> <b>Registrado em:</b> {register}
+    
+    📡 <b>Canais Vinculados:</b> {countChannel}
+    
+    <tg-emoji emoji-id="5462921117423384478">⚙️</tg-emoji> Gerencie suas configurações e acompanhe os canais vinculados pelo menu abaixo!"
+  buttons:
+    - - text: "Meus Canais"
+        callback_data: "profile-user-channels"
+        custom_emoji: "5334882760735598374"
+    - - text: "📅 Agendamentos"
+        callback_data: "my-schedules"
+      - text: "📂 Rascunhos"
+        callback_data: "my-drafts"
+    - - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+    # - - text: "Assumir Controle"
+    #     switch_inline_query_current_chat: "Claim "
+    #     custom_emoji: "5472308992514464048"
+
+- name: help
+  text: |
+    <b>🆘 Guia Rápido para Configuração</b>
+    
+    💡 Ativar as <b>Legendas Automáticas</b> no seu canal é simples:
+    
+    1️⃣ <b>Adicione o bot</b> @{botUser} ao seu canal.
+    2️⃣ Conceda as seguintes permissões:
+      ✔️ Editar mensagens
+      ✔️ Fixar mensagens
+      ✔️ Publicar postagens
+      ✔️ Convidar usuários via link
+                
+    <blockquote><b>📌 Após isso, o bot enviará uma confirmação para você, é só confimar e o bot será ativado e pré configurado automaticamente.</b></blockquote>
+    
+    <b>Caso não funcione, encaminhe qualquer mensagem do seu canal mencionando o nome do canal para ativá-lo manualmente.</b>
+  buttons:
+    - - text: "Adicionar ao Canal"
+        url: "http://t.me/{botUser}?startchannel&admin=post_messages+edit_messages+delete_messages+invite_users"
+        custom_emoji: "5330115548900501467"
+    - - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+
+- name: about
+  text: |
+    <b>ℹ️ Sobre o Bot</b>
+    
+    <blockquote>📌 <b>Versão:</b> <i>{botVersion}</i></blockquote>
+    
+    <tg-emoji emoji-id="5445284980978621387">🚀</tg-emoji> Este bot foi criado para facilitar a adição de <b>legendas automáticas</b> em postagens de canais, tornando a gestão de conteúdo mais eficiente e dinâmica.
+    
+    📢 Para aprender a configurar, consulte a aba <a href='tg://user?id={botId}'>Ajuda</a>!
+  buttons:
+    - - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+      - text: "Ajuda"
+        callback_data: "help"
+        custom_emoji: "5467666648263564704"
+
+- name: profile-user-channels
+  text: |
+    <b>🏷️ Canais Vinculados</b>
+    
+    <blockquote>📌 Estes são os canais onde o bot está configurado para adicionar legendas automaticamente às postagens.</blockquote>
+    
+    <b>🔄 Se o bot for removido de um canal, ele deixará de aplicar as legendas e será removido automaticamente.</b>
+  buttons:
+    - - text: "⬅️ Voltar"
+        callback_data: "profile-info"
+
+- name: config-channel
+  text: |
+    <b>📢 Canal Selecionado</b>
+    
+    <blockquote>🔹 <b>Nome:</b> {title}
+    🔹 <b>ID:</b> <code>{channelId}</code></blockquote>
+    
+    <b>⚙️ Aqui você pode gerenciar as configurações de legendas deste canal. Edite conforme necessário e salve as alterações.</b>
+  buttons:
+    - - text: "⚙ Configure Agora"
+        web_app: "{webAppUrl}"
+        style: "primary"
+    - - text: "Sticker Separador"
+        callback_data: "sptc"
+        custom_emoji: "5472164874886846699"
+    - - text: "Transferir Acesso"
+        callback_data: "paccess-info"
+        custom_emoji: "5330115548900501467"
+    #- - text: "🔗 Agrupar Canais"
+        #callback_data: "gc-info:{channelId}"
+    - - text: "Remover Canal"
+        callback_data: "del"
+        custom_emoji: "5372825386591732174"
+    - - text: "🔙 Voltar"
+        callback_data: "profile-user-channels"
+      - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+
+- name: config-channel-premium
+  text: |
+    <b>📢 Canal Selecionado</b>
+    
+    <blockquote>🔹 <b>Nome:</b> {title}
+    🔹 <b>ID:</b> <code>{channelId}</code></blockquote>
+    
+    <b>⚙️ Aqui você pode gerenciar as configurações de legendas deste canal. Edite conforme necessário e salve as alterações.</b>
+  buttons:
+    - - text: "⚙ Configure Agora"
+        web_app: "{webAppUrl}"
+        style: "primary"
+    - - text: "⭐ Premium"
+        callback_data: "premium-features:{channelId}"
+        custom_emoji: "5472164874886846699"
+    - - text: "Sticker Separador"
+        callback_data: "sptc"
+        custom_emoji: "5472164874886846699"
+    - - text: "Transferir Acesso"
+        callback_data: "paccess-info"
+        custom_emoji: "5330115548900501467"
+    #- - text: "🔗 Agrupar Canais"
+        #callback_data: "gc-info:{channelId}"
+    - - text: "Remover Canal"
+        callback_data: "del"
+        custom_emoji: "5372825386591732174"
+    - - text: "🔙 Voltar"
+        callback_data: "profile-user-channels"
+      - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+
+- name: premium-features
+  text: |
+    <b>⭐ Recursos Premium</b>
+    
+    <blockquote>🎯 Configure recursos exclusivos para sua assinatura premium.
+    
+    ✨ <b>Legenda Premium:</b> Use emojis customizados na legenda do canal.
+    🎯 <b>Separador Premium:</b> Configure emojis customizados como separador.</blockquote>
+    
+    Selecione uma opção abaixo para configurar:
+  buttons:
+    - - text: "✨ Legenda Premium"
+        callback_data: "setcaption:{channelId}"
+        custom_emoji: "5472164874886846699"
+    - - text: "🎯 Separador Premium"
+        callback_data: "sptc-config"
+        custom_emoji: "5472164874886846699"
+    - - text: "🔙 Voltar"
+        callback_data: "config:{channelId}"
+
+- name: del
+  text: |
+    <b>⚠️ Confirmar Remoção</b>
+    
+    <blockquote>Você tem certeza que deseja remover o canal <b>{title}</b>?
+    Isso desativará as legendas automáticas para este canal.</blockquote>
+    
+    <b>Esta ação não pode ser desfeita.</b> Toque no botão abaixo para confirmar.
+  buttons:
+    - - text: "✅ Confirmar"
+        callback_data: "confirm-del:{channelId}"
+        style: "success"
+      - text: "❌ Cancelar"
+        callback_data: "config:{channelId}"
+        style: "danger"
+
+- name: confirm-del
+  text: |
+    <b>✅ Canal Removido</b>
+    
+    <blockquote>O canal <b>{title}</b> foi removido com sucesso. As legendas automáticas não serão mais adicionadas a este canal.</blockquote>
+    
+    <b>Você pode adicioná-lo novamente a qualquer momento, se desejar.</b>
+  buttons:
+    - - text: "🔙 Voltar"
+        callback_data: "profile-user-channels"
+      - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+
+- name: toadd-exist-channel
+  text: |
+    <b><i>💁 <a href='tg://user?id={botId}'>Adicionar</a> • Este canal <b>({channelName})</b> já foi adicionado anteriormente</i></b>
+  buttons:
+    - - text: "📝 Meus Canais"
+        callback_data: "profile-user-channels"
+      - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+
+- name: toadd-require-message
+  text: |
+    <b>❔ Confirmação necessária, {firstName}</b>
+    
+    <b><i>Você realmente deseja vincular o seguinte canal ao bot?</i></b>
+    
+    <blockquote>📌 <b>Canal:</b> <i>{channelName}</i>
+    🔗 <b>ID:</b> <code>{channelId}</code></blockquote>
+    
+    ✅ Se sim, clique em <b>Confirmar</b> para prosseguir.
+    ❌ Caso contrário, clique em <b>Cancelar</b>.
+    
+    ⚠️ <i>Após a confirmação, o bot começará a gerenciar as legendas automáticas neste canal.</i>
+  buttons:
+    - - text: "✅ | Confirmar"
+        callback_data: "add-yes:{sessionKey}"
+        style: "success"
+      - text: "❌ | Cancelar"
+        callback_data: "add-not:{sessionKey}"
+        style: "danger"
+
+- name: toadd-success-message
+  text: |
+      <b>🎉 Sucesso, <a href='tg://user?id={botId}'>{firstName}</a>!</b>
+      
+      <b><i>✅ Seu <a href='tg://user?id={botId}'>Canal</a> foi vinculado com sucesso ao bot!</i></b>
+      
+      🔥 Agora, todas as postagens serão acompanhadas automaticamente por legendas personalizadas.
+      
+      📌 Se precisar ajustar alguma configuração, consulte a aba <a href='tg://user?id={botId}'>Ajuda</a>!
+  buttons:
+    - - text: "⚙️ Configure Agora"
+        web_app: "{miniAppUrl}"
+        style: "primary"
+    - - text: "📢 Meu Canal"
+        callback_data: "config:{channelId}"
+      - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+
+- name: toadd-cancel-message
+  text: |
+    ❌ <b>Vinculação cancelada</b>
+    
+    Você cancelou o processo de vinculação do canal.
+    
+    <blockquote>📌 Caso precise de ajuda, acesse a aba <b>🆘 Como Usar</b> para aprender a configurar corretamente.</blockquote>
+  buttons:
+    - - text: "🆘 Como Usar"
+        callback_data: "help"
+    - - text: "📋 Meus Dados"
+        callback_data: "profile-info"
+      - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+
+- name: toadd-notfound-permissions-message
+  text: |
+    ⚠️ <b>Permissões Insuficientes</b>
+    
+    <blockquote>📌 O bot precisa de permissões específicas para funcionar corretamente no canal.</blockquote>
+    
+    <b>✅ Verifique se o bot tem as seguintes permissões:</b>
+      • Editar mensagens
+      • Excluir mensagens
+      • Postar mensagens
+      • Convidar via link
+      
+    <blockquote>ℹ️ Consulte a aba <b>📖 Como Usar</b> para ver o passo a passo de como vincular seu canal corretamente.</blockquote>
+  buttons:
+    - - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+      - text: "🆘 Como Usar"
+        callback_data: "help"
+
+
+- name: ask-separator-message
+  text: |
+    ✨ <b>Sticker Separador</b>
+    
+    <blockquote>Vamos deixar o canal <b>{channelName}</b> mais organizado?</blockquote>
+    
+    Adicione um sticker separador entre as postagens e dê um charme especial ao seu conteúdo!
+  buttons:
+    - - text: "🧩 Adicionar"
+        callback_data: "sptc-config"
+      - text: "🗑️ Excluir"
+        callback_data: "spex"
+    - - text: "🔙 Voltar"
+        callback_data: "config:{channelId}"
+
+- name: require-separator-message
+  text: "✨ <b>Separador</b>\n\n<blockquote>📌 Você está configurando um separador para o canal: <b>{channelName}</b></blockquote>\n\n📎 <b>Envie um sticker</b> ou <b>um emoji premium</b> (custom emoji) para usar como separador entre as postagens.\n\n⚠️ <i>Para usar emoji premium, você precisa ter uma conta Telegram conectada.</i>\n⚠️ <i>Recomendamos stickers estáticos para melhor visualização.</i>"
+  buttons:
+    - - text: "🔙 Voltar"
+        callback_data: "sptc"
+
+- name: failed-save-separator
+  text: "✨ <b>Sticker Separador</b>\n\n<blockquote>❌ Não foi possível configurar o separador.</blockquote>\n\n📎 Verifique se você enviou um sticker válido.  \n⚠️ Apenas stickers estáticos são recomendados para melhor visualização.\n\n<b>🔁 Tente novamente e deixe suas postagens ainda mais organizadas!</b>"
+  buttons:
+    - - text: "🔙 Voltar"
+        callback_data: "config:{channelId}"
+
+- name: success-save-separator
+  text: "✅ <b>Separador salvo com sucesso!</b>\n\nO sticker foi definido como separador para o canal <b>{channelName}</b>. Agora suas postagens vão ficar muito mais organizadas e estilosas!"
+  buttons:
+    - - text: "🔙 Voltar"
+        callback_data: "config:{channelId}"
+
+- name: success-save-custom-emoji-separator
+  text: "✅ <b>Separador salvo com sucesso!</b>\n\nO emoji premium foi definido como separador para o canal <b>{channelName}</b>. Agora suas postagens vão ficar muito mais organizadas e estilosas!"
+  buttons:
+    - - text: "🔙 Voltar"
+        callback_data: "config:{channelId}"
+
+- name: require-connected-account-separator
+  text: "✨ <b>Separador com Emoji Premium</b>\n\n<blockquote>❌ Você precisa ter uma conta Telegram conectada para usar emojis premium como separador.</blockquote>\n\n📎 Conecte sua conta em <b>Minha Conta → Conectar Conta</b> e tente novamente.\n\n💡 Você tamb\u00e9m pode enviar um <b>sticker comum</b> como separador sem precisar de conta conectada."
+  buttons:
+    - - text: "🔙 Voltar"
+        callback_data: "config:{channelId}"
+
+- name: success-delete-separator
+  text: "✅ <b>Sticker Separador Removido!</b>\n\nO sticker separador do canal <b>{channelName}</b> foi excluído com sucesso.\n\n📌 Agora as postagens do canal não terão mais o separador entre elas. Se quiser, você pode adicionar um novo a qualquer momento!"
+  buttons:
+    - - text: "🔙 Voltar"
+        callback_data: "config:{channelId}"
+
+
+- name: ask-paccess-message
+  text: "<b>🔄 Transferência de Acesso</b>\n\n<blockquote>📌 Você pode transferir a posse deste canal para outro usuário. O novo proprietário poderá gerenciar todas as configurações normalmente.</blockquote>\n\n<b>⚠️ Atenção:</b>\n<i>- Apenas o usuário que cadastrou o canal pode transferi-lo.</i>\n<i>- O novo dono deve ter interagido com o bot anteriormente.</i>\n<i>- Após a transferência, você perderá o controle sobre as configurações do canal.</i>\n\n<b>✅ Para continuar, inicie o processo de transferência abaixo.</b>"
+  buttons:
+    - - text: "🔑 Transferir Acesso"
+        callback_data: "transfer"
+    - - text: "🔙 Voltar"
+        callback_data: "config:{channelId}"
+
+- name: require-paccess-message
+  text: "<b>📩 Informe o ID do Usuário</b>\n\n<blockquote>📌 Você está prestes a transferir a posse do canal:</blockquote>\n\n🏷️ <b>Nome:</b> {channelName}\n🆔 <b>ID:</b> {channelId}\n👤 <b>Registrado por:</b> {ownerName} ({ownerId})\n\n<blockquote>✏️ Envie o ID do usuário para quem deseja transferir a posse.</blockquote>\n\n<b>⚠️ Certifique-se de que o usuário já interagiu com o bot antes.</b>\n\n<b>🔹 Aguarde a confirmação antes de concluir a transferência.</b>"
+  buttons:
+    - - text: "🔙 Voltar"
+        callback_data: "config:{channelId}"
+
+- name: success-old-paccess-message
+  text: "<b>✅ Transferência Concluída</b>\n\n<blockquote>📌 A posse do canal foi transferida com sucesso para o novo usuário.</blockquote>\n\n🏷️ <b>Canal:</b> {channelName}\n🆔 <b>ID:</b> {channelId}\n\n👤 <b>Novo Dono:</b> {newOwnerName} ({newOwnerId})\n\n🚀 <b>Agora, o novo proprietário pode gerenciar as configurações do canal normalmente.</b>"
+  buttons:
+    - - text: "🔙 Voltar"
+        callback_data: "profile-user-channels"
+      - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+
+- name: success-new-paccess-message
+  text: "<b>✅ Sucesso!</b>\n\n<blockquote>Agora você é o novo administrador do canal <i>{channelName}</i> (ID: <code>{channelId}</code>)! Todos os controles e configurações do bot estão sob sua responsabilidade.</blockquote>\n\n<b>🔹 Lembre-se de ajustar as configurações de legenda conforme necessário!</b>"
+  buttons:
+    - - text: "⚙️ Configure Agora"
+        web_app: "{miniAppUrl}"
+    - - text: "📢 Meu Canal"
+        callback_data: "config:{channelId}"
+      - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+
+
+- name: ask-gc-message
+  text: "<b>📌 Agrupamento de Canais</b>\n\n<blockquote>🔗 Este comando permite que você agrupe seus canais, exibindo os botões dos outros canais no canal selecionado.</blockquote>\n\n🛠️ <b>Como funciona?</b>\n➜ Se você tiver dois ou mais canais, pode vinculá-los para que os botões/plaquinhas de um canal apareçam no canal selecionado.\n➜ Isso facilita a navegação entre seus canais e melhora a experiência dos seus seguidores.\n\n⚙️ <b>Deseja prosseguir com o agrupamento?</b>\n✔️ Toque em 'Confirmar' para continuar.\n❌ Toque em 'Cancelar' para desistir"
+  buttons:
+    - - text: "✔️ Confirmar"
+        callback_data: "gc.yes"
+      - text: "❌ Cancelar"
+        callback_data: "config:{channelId}"
+
+
+- name: claim-ownership-require-message
+  text: "<b>🔑 Assumir Controle do Canal</b>\n<blockquote>📌 Canal: <i>{channelName}</i>\n🔗 ID do Canal: <code>{channelId}</code>\n👤 Cadastrado por: <i>{ownerName}\n             - ID: {ownerId})</i></blockquote>\n<b>🔹 Se você for o administrador principal deste canal e deseja assumir o controle, clique em 'Assumir Controle'. Após a confirmação, você será o único responsável pelas configurações do bot neste canal.</b>"
+  buttons:
+    - - text: "✅ Aceitar"
+        callback_data: "accept.claim:{sessionKey}"
+      - text: "❌ Cancelar"
+        callback_data: "config:{channelId}"
+
+
+- name: publi
+  text: |
+    <b>📣 Automatize suas postagens com estilo!</b>
+    
+    Com o <b>@{botUsername}</b>, você adiciona <i>legendas automáticas</i> em todas as publicações do seu canal — sem esforço e com muito mais organização.
+    
+    <blockquote>💬 <b>Personalize</b> sua legenda do jeito que quiser  
+    🧩 <b>Adicione separadores</b> com stickers estilosos  
+    ⚙️ <b>Edite</b> tudo facilmente com apenas alguns toques\n</blockquote>
+    
+    <b>✨ Ideal para canais que buscam agilidade, praticidade e um visual mais charmoso.</b>
+    
+    <i>Chega de colar legenda manualmente — o bot faz isso por você!</i> 🚀
+  buttons:
+    - - text: "🎯 Quero no meu Canal"
+        url: "t.me/{botUsername}?start=start"
+
+
+- name: support-sent
+  text: |
+    <b><tg-emoji emoji-id="5472055112702629499">✅</tg-emoji> <a href='tg://user?id={botId}'>Mensagem enviada com sucesso!</a></b>
+    
+    <tg-emoji emoji-id="5226512880362332956">📨</tg-emoji> Sua mensagem foi <b><a href='tg://user?id={botId}'>encaminhada para um administrador</a></b>.
+    
+    <tg-emoji emoji-id="5472164874886846699">⏳</tg-emoji> <b><a href='tg://user?id={botId}'>Aguarde</a></b>, em breve um admin irá analisar sua solicitação e responder você.
+    
+    <tg-emoji emoji-id="5372981976804366741">💬</tg-emoji> <b><a href='tg://user?id={botId}'>Obrigado pelo contato!</a></b>
+  buttons:
+    - - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+
+  
+- name: support-msg-admin
+  text: |
+    <b>📨 Novo contato recebido</b>
+    
+    👤 <b>Usuário:</b> <a href='tg://user?id={userId}'>{firstName}</a>
+    🆔 <b>ID:</b> <code>{userId}</code>
+    
+    💬 <b>Mensagem enviada pelo usuário:</b>
+    
+    <blockquote>{userMessage}</blockquote>
+    
+    ⚠️ <b>Um administrador pode responder diretamente ao usuário.</b>
+  buttons:
+    - - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+
+- name: support-usage
+  text: |
+    <b><tg-emoji emoji-id="5467596412663372909">❓</tg-emoji> Como usar o comando /ouvidoria</b>
+    
+    <tg-emoji emoji-id="5465300082628763143">💬</tg-emoji> Utilize este comando para enviar uma mensagem diretamente para a equipe de administração.
+    
+    <b><tg-emoji emoji-id="6021514878789883831">📌</tg-emoji> Exemplo de uso:</b>
+    
+    <code>/ouvidoria Não estou conseguindo configurar o bot no meu canal.</code>
+    
+    <tg-emoji emoji-id="5406631276042002796">📨</tg-emoji> Sua mensagem será encaminhada para um administrador e você receberá uma resposta assim que possível.
+    
+    <tg-emoji emoji-id="6019102674832595118">⚠️</tg-emoji> <b>Importante:</b> envie uma descrição clara do problema para que possamos ajudar mais rápido.
+  buttons:
+    - - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+
+- name: notfound-message
+  text: "❌ <b>Comando não reconhecido!</b>\n\n✨ Parece que você tentou fazer algo que nem eu entendi… Talvez um bug na Matrix? Ou só um toque de criatividade mesmo!\n\nSe estiver em dúvida, corre lá na aba <b>Ajuda</b> — prometo te guiar com carinho e sem bugs!"
+  buttons:
+    - - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
+
+
+# ─── MTProto / Conta Conectada ───
+
+- name: ask-caption-message
+  text: |
+    <b>📝 Configurar Legenda Personalizada</b>
+    
+    Envie uma mensagem com a legenda que deseja usar como <b>padrão</b> no canal <b>{channelName}</b>.
+    
+    <tg-emoji emoji-id="5465665476971471368">💡</tg-emoji> <b>Você pode usar:</b>
+    • Negrito, itálico, underline, spoiler
+    • Links, menções, hashtags
+    • Emojis personalizados Premium 🎨
+    • Blocos de código e citação
+    • <i>Qualquer formatação suportada pelo Telegram</i>
+    
+    ⚠️ Sua legenda substituirá a legenda padrão atual.
+    Envie <b>apenas o texto</b> da legenda.
+  buttons:
+    - - text: "🔙 Cancelar"
+        callback_data: "config:{channelId}"
+
+- name: success-save-caption
+  text: |
+    <b>✅ Legenda configurada com sucesso!</b>
+    
+    A partir de agora, todas as postagens no canal <b>{channelName}</b> usarão esta legenda personalizada com formatação avançada via sua conta Telegram conectada.
+    
+    <tg-emoji emoji-id="5465665476971471368">💡</tg-emoji> Você pode reconfigurar a legenda a qualquer momento enviando uma nova mensagem.
+  buttons:
+    - - text: "🔙 Voltar ao canal"
+        callback_data: "config:{channelId}"
+
+- name: default-caption
+  text: |
+    🐈‍⠀៹ [t.me/legendasbot](https://t.me/{botUsername})   ‹
+
+- name: newpack-caption
+  text: |
+    ╔═━──━═༻✧༺═━──━═╗
+
+        𖦹⁠⁠⁠ ࣪ ⭑ ᥫ᭡
+        (｡•́︿•̀｡)っ✧.*ೃ༄
+        ˗ˏˋ [$title]($link) ⋆｡˚ ☁︎
+            彡♡ ₊˚
+
+        ⋆｡˚ ❀ @{botUsername} ☽⁺₊
+
+    ╚═━──━═༻✧༺═━──━═╝
