@@ -149,3 +149,46 @@ func (s *ChannelEventService) CleanupOld(ctx context.Context, retentionDays int)
 		logger.Info("CHANNEL_EVENTS", "Eventos antigos removidos: %d", deleted)
 	}
 }
+
+func (s *ChannelEventService) DeleteAll(ctx context.Context) (int64, error) {
+	if s == nil || s.repo == nil {
+		return 0, nil
+	}
+	deleted, err := s.repo.DeleteAll(ctx)
+	if err != nil {
+		logger.Warn("CHANNEL_EVENTS", "Falha ao excluir todos os eventos: %v", err)
+		return 0, err
+	}
+	logger.Info("CHANNEL_EVENTS", "Todos os eventos foram excluídos: %d registros", deleted)
+	return deleted, nil
+}
+
+func (s *ChannelEventService) StartCleanupScheduler(ctx context.Context, getRetentionDays func() int) {
+	if s == nil || s.repo == nil {
+		return
+	}
+
+	// Executar limpeza inicial no startup
+	retention := ChannelEventRetentionDays
+	if getRetentionDays != nil {
+		retention = getRetentionDays()
+	}
+	s.CleanupOld(ctx, retention)
+
+	// Scheduler a cada 1 hora para limpar logs expirados
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ret := ChannelEventRetentionDays
+			if getRetentionDays != nil {
+				ret = getRetentionDays()
+			}
+			s.CleanupOld(ctx, ret)
+		}
+	}
+}

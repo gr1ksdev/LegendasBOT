@@ -158,6 +158,7 @@ func RegisterRoutes(r *gin.Engine, c *container.AppContainer) {
 		adminRoute.GET("/media-proxy/:fileId", mediaController.GetMediaPreview)
 		adminRoute.GET("/audit/checkbot", auditController.GetCheckBotAudit)
 		adminRoute.GET("/logs", channelEventsController.List)
+		adminRoute.DELETE("/logs", channelEventsController.DeleteAll)
 		adminRoute.POST("/audit/bulk-delete", auditController.BulkDeleteUserChannels)
 
 		adminRoute.POST("/users/:userId/admin", getALlUsers.UpdateUserAdminController)

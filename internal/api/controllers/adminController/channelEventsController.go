@@ -49,6 +49,19 @@ func (c *ChannelEventsController) List(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, types.NewSuccessResponse(result))
 }
 
+func (c *ChannelEventsController) DeleteAll(ctx *gin.Context) {
+	deleted, err := c.container.ChannelEventService.DeleteAll(ctx)
+	if err != nil {
+		ctx.Error(err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, types.NewSuccessResponse(gin.H{
+		"deleted": deleted,
+		"message": "Todos os logs foram excluídos com sucesso",
+	}))
+}
+
 func parseInt64Query(ctx *gin.Context, key string) int64 {
 	value := ctx.Query(key)
 	if value == "" {

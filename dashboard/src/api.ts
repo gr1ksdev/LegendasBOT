@@ -274,6 +274,7 @@ export const updateServerConfig = async (payload: {
     fixedPostBuilderEnabled: boolean;
     fixedPostBuilderKey: string;
     fixedPostBuilderPayload: string;
+    logRetentionDays?: number;
 }) => {
     return apiFetch(`/api/admin/config`, {
         method: 'PUT',
@@ -322,6 +323,13 @@ export const fetchAdminLogs = async (filters: AdminLogsFilters = {}): Promise<Ad
         method: 'GET',
     });
     return response?.data || { events: [], total: 0, limit: filters.limit || 50, offset: filters.offset || 0 };
+};
+
+export const deleteAllAdminLogs = async (): Promise<{ deleted: number; message: string }> => {
+    const response = await apiFetch('/api/admin/logs', {
+        method: 'DELETE',
+    });
+    return response?.data;
 };
 
 // ===== Connected Account API =====

@@ -4,9 +4,10 @@ import {
   Inbox, CheckCircle2, SkipForward, XCircle, ShieldAlert, RefreshCw, Link, FileText, LayoutGrid, Wrench, Edit3,
   PlusCircle, Trash2, Eye, Save, Send, AlertTriangle, User, ExternalLink, Code
 } from 'lucide-react';
-import { fetchAdminLogs } from '../api';
+import { fetchAdminLogs, deleteAllAdminLogs } from '../api';
 import { AdminLogsFilters, ChannelEvent } from '../types';
 import { useToast } from './Toast';
+import { ConfirmModal } from './ConfirmModal';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
@@ -109,9 +110,24 @@ export function AdminLogsTab({ navigateToChannel, initialChannelId = '' }: Admin
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const page = useMemo(() => Math.floor((filters.offset || 0) / (filters.limit || 50)) + 1, [filters.offset, filters.limit]);
   const pageCount = useMemo(() => Math.max(1, Math.ceil(total / (filters.limit || 50))), [total, filters.limit]);
+
+  const handleDeleteAll = async () => {
+    setDeleting(true);
+    try {
+      const res = await deleteAllAdminLogs();
+      toast(res?.message || 'Todos os logs foram excluídos com sucesso!', 'success');
+      loadLogs({ ...filters, offset: 0 });
+    } catch (err: any) {
+      toast(err.message || 'Erro ao excluir logs', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const loadLogs = async (nextFilters = filters) => {
     setLoading(true);
@@ -220,6 +236,15 @@ export function AdminLogsTab({ navigateToChannel, initialChannelId = '' }: Admin
             </Button>
             <Button variant="outline" className="h-10 px-3 rounded-xl text-xs font-semibold" onClick={() => loadLogs(filters)} disabled={loading} title="Atualizar logs">
               <RefreshCcw size={15} className={loading ? 'animate-spin' : ''} />
+            </Button>
+            <Button
+              variant="outline"
+              className="h-10 px-3 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border-rose-500/30"
+              onClick={() => setIsDeleteModalOpen(true)}
+              disabled={loading || deleting || total === 0}
+              title="Excluir todos os logs do banco"
+            >
+              <Trash2 size={15} className={deleting ? 'animate-spin' : ''} />
             </Button>
           </div>
         </div>
@@ -454,6 +479,16 @@ export function AdminLogsTab({ navigateToChannel, initialChannelId = '' }: Admin
           </Button>
         </div>
       )}
+
+      <ConfirmModal
+        open={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleDeleteAll}
+        title="Excluir todos os logs?"
+        message="Tem certeza que deseja apagar permanentemente todos os registros de logs do banco de dados? Esta ação não pode ser desfeita e liberará espaço no banco."
+        confirmText="Sim, Excluir Tudo"
+        danger
+      />
     </div>
   );
 }

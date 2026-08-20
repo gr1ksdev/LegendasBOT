@@ -23,6 +23,7 @@ export function AdminConfigTab() {
     const [fixedPostEnabled, setFixedPostEnabled] = useState(true);
     const [fixedPostKey, setFixedPostKey] = useState('legendasbot');
     const [fixedPostPayload, setFixedPostPayload] = useState('');
+    const [logRetentionDays, setLogRetentionDays] = useState(30);
 
     const toast = useToast();
 
@@ -40,6 +41,7 @@ export function AdminConfigTab() {
                         setFixedPostEnabled(Boolean(serverData.fixedPostBuilderEnabled));
                         setFixedPostKey(serverData.fixedPostBuilderKey || 'legendasbot');
                         setFixedPostPayload(serverData.fixedPostBuilderPayload || '');
+                        setLogRetentionDays(serverData.logRetentionDays || 30);
                     }
                 }
             } catch {
@@ -65,6 +67,7 @@ export function AdminConfigTab() {
                     fixedPostBuilderEnabled: fixedPostEnabled,
                     fixedPostBuilderKey: fixedPostKey,
                     fixedPostBuilderPayload: fixedPostPayload,
+                    logRetentionDays: logRetentionDays,
                 });
             } catch {
                 // silent — keep old cache alive
@@ -73,7 +76,7 @@ export function AdminConfigTab() {
 
         const interval = setInterval(refresh, REFRESH_INTERVAL);
         return () => clearInterval(interval);
-    }, [loading, !!config, fixedPostEnabled]);
+    }, [loading, !!config, fixedPostEnabled, logRetentionDays]);
 
     const handleSave = async (overrides: Partial<ServerConfig> = {}) => {
         if (!config) return;
@@ -85,7 +88,8 @@ export function AdminConfigTab() {
             globalNewPackCaption: overrides.globalNewPackCaption ?? globalNewPack,
             fixedPostBuilderEnabled: overrides.fixedPostBuilderEnabled ?? fixedPostEnabled,
             fixedPostBuilderKey: overrides.fixedPostBuilderKey ?? fixedPostKey,
-            fixedPostBuilderPayload: overrides.fixedPostBuilderPayload ?? fixedPostPayload
+            fixedPostBuilderPayload: overrides.fixedPostBuilderPayload ?? fixedPostPayload,
+            logRetentionDays: overrides.logRetentionDays ?? logRetentionDays,
         };
 
         setSaving(true);
@@ -100,6 +104,7 @@ export function AdminConfigTab() {
                     setFixedPostEnabled(Boolean(serverData.fixedPostBuilderEnabled));
                     setFixedPostKey(serverData.fixedPostBuilderKey || 'legendasbot');
                     setFixedPostPayload(serverData.fixedPostBuilderPayload || '');
+                    setLogRetentionDays(serverData.logRetentionDays || 30);
                 }
                 toast('Configurações atualizadas com sucesso', 'success');
             }
@@ -178,7 +183,38 @@ export function AdminConfigTab() {
                             disabled={saving}
                         />
                     </div>
+                    <div className="admin-config-row flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-border p-3">
+                        <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium">Retenção de Logs (dias)</p>
+                            <p className="text-xs text-muted-foreground">
+                                Limpeza automática a cada 1 hora para registros com mais de {logRetentionDays} dias
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Input
+                                type="number"
+                                min={1}
+                                max={365}
+                                value={logRetentionDays}
+                                onChange={(e) => setLogRetentionDays(Math.max(1, parseInt(e.target.value) || 1))}
+                                disabled={saving}
+                                className="w-20 h-9 text-xs font-semibold text-center"
+                            />
+                            <span className="text-xs text-muted-foreground font-medium">dias</span>
+                        </div>
+                    </div>
                 </CardContent>
+                <CardFooter className="admin-config-footer justify-end gap-2">
+                    <Button
+                        variant="default"
+                        onClick={() => !saving && handleSave()}
+                        disabled={saving}
+                        className="admin-config-save-button"
+                    >
+                        <Save size={15} className="mr-1.5" />
+                        {saving ? 'Salvando...' : 'Salvar'}
+                    </Button>
+                </CardFooter>
             </Card>
 
             {/* ── Legendas ── */}
@@ -210,6 +246,17 @@ export function AdminConfigTab() {
                         />
                     </div>
                 </CardContent>
+                <CardFooter className="admin-config-footer justify-end gap-2">
+                    <Button
+                        variant="default"
+                        onClick={() => !saving && handleSave()}
+                        disabled={saving}
+                        className="admin-config-save-button"
+                    >
+                        <Save size={15} className="mr-1.5" />
+                        {saving ? 'Salvando...' : 'Salvar'}
+                    </Button>
+                </CardFooter>
             </Card>
 
             {/* ── PostBuilder ── */}

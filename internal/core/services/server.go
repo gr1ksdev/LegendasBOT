@@ -24,7 +24,7 @@ func (s *ServerService) GetConfig(ctx context.Context) (*models.ServerConfig, er
 	return config, nil
 }
 
-func (s *ServerService) UpdateConfig(ctx context.Context, maintenance, forceJoin bool, globalDefaultCaption, globalNewPackCaption string, fixedPostBuilderEnabled bool, fixedPostBuilderKey, fixedPostBuilderPayload string) (*models.ServerConfig, error) {
+func (s *ServerService) UpdateConfig(ctx context.Context, maintenance, forceJoin bool, globalDefaultCaption, globalNewPackCaption string, fixedPostBuilderEnabled bool, fixedPostBuilderKey, fixedPostBuilderPayload string, logRetentionDays int) (*models.ServerConfig, error) {
 	config, err := s.serverRepo.GetServerConfig(ctx)
 	if err != nil {
 		return nil, errors.Internal(err)
@@ -37,11 +37,26 @@ func (s *ServerService) UpdateConfig(ctx context.Context, maintenance, forceJoin
 	config.FixedPostBuilderEnabled = fixedPostBuilderEnabled
 	config.FixedPostBuilderKey = fixedPostBuilderKey
 	config.FixedPostBuilderPayload = fixedPostBuilderPayload
+	if logRetentionDays <= 0 {
+		logRetentionDays = 30
+	}
+	config.LogRetentionDays = logRetentionDays
 
 	if err := s.serverRepo.UpdateServerConfig(ctx, config); err != nil {
 		return nil, errors.Internal(err)
 	}
 	return config, nil
+}
+
+func (s *ServerService) GetLogRetentionDays() int {
+	if s == nil || s.serverRepo == nil {
+		return 30
+	}
+	config, err := s.serverRepo.GetServerConfig(context.Background())
+	if err != nil || config == nil || config.LogRetentionDays <= 0 {
+		return 30
+	}
+	return config.LogRetentionDays
 }
 
 func (s *ServerService) SaveConfig(ctx context.Context, config *models.ServerConfig) error {

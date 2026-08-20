@@ -162,6 +162,7 @@ func initServerConfig(db *gorm.DB) error {
 		FixedPostBuilderKey:     "legendasbot",
 		FixedPostBuilderPayload: defaultFixedPostBuilderPayload,
 		GlobalNewPackCaption:    defaultGlobalNewPackCaption,
+		LogRetentionDays:        30,
 	}
 
 	if err := db.WithContext(context.Background()).FirstOrCreate(&config, models.ServerConfig{ID: 1}).Error; err != nil {
@@ -184,6 +185,10 @@ func initServerConfig(db *gorm.DB) error {
 	if !validFixedPostBuilderPayload(config.FixedPostBuilderPayload) {
 		config.FixedPostBuilderPayload = defaultFixedPostBuilderPayload
 		config.FixedPostBuilderEnabled = true
+		changed = true
+	}
+	if config.LogRetentionDays <= 0 {
+		config.LogRetentionDays = 30
 		changed = true
 	}
 	if changed {

@@ -63,6 +63,11 @@ func (r *ChannelEventRepository) DeleteOlderThan(ctx context.Context, cutoff tim
 	return result.RowsAffected, result.Error
 }
 
+func (r *ChannelEventRepository) DeleteAll(ctx context.Context) (int64, error) {
+	result := r.db.WithContext(ctx).Where("1 = 1").Delete(&models.ChannelEvent{})
+	return result.RowsAffected, result.Error
+}
+
 func (r *ChannelEventRepository) applyFilters(query *gorm.DB, filters ChannelEventFilters) *gorm.DB {
 	if filters.ChannelID != 0 {
 		query = query.Where("channel_id = ?", filters.ChannelID)

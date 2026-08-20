@@ -255,7 +255,7 @@ func NewAppContainer(db *gorm.DB, telegoClient *telego.Bot) *AppContainer {
 func (c *AppContainer) StartBackground(ctx context.Context) {
 	c.startOnce.Do(func() {
 		c.syncFixedPostBuilderSession(ctx)
-		go c.ChannelEventService.CleanupOld(ctx, services.ChannelEventRetentionDays)
+		go c.ChannelEventService.StartCleanupScheduler(ctx, c.ServerService.GetLogRetentionDays)
 		c.startBroadcastWorkers(ctx, 5)
 		go c.SchedulerService.Start(ctx)
 		go c.AutoDeleteService.Start(ctx)
