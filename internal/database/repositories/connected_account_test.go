@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
 	"github.com/leirbagxis/FreddyBot/internal/database/models"
 	"github.com/leirbagxis/FreddyBot/internal/database/repositories"
 	"github.com/leirbagxis/FreddyBot/pkg/config"
 	"github.com/leirbagxis/FreddyBot/pkg/logger"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )

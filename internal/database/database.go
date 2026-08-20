@@ -19,16 +19,7 @@ import (
 
 const defaultGlobalDefaultCaption = "🐈‍⠀៹ [t.me/legendasbot](https://t.me/{usernameBot})  ‹"
 
-const defaultGlobalNewPackCaption = `╔═━──━═༻✧༺═━──━═╗
-
-        𖦹⁠⁠⁠ ࣪ ⭑ ᥫ᭡
-        (｡•́︿•̀｡)っ✧.*ೃ༄
-        ˗ˏˋ [$name]($link) ⋆｡˚ ☁︎
-            彡♡ ₊˚
-
-⋆｡˚ ❀ @{usernameBot} ☽⁺₊
-
-╚═━──━═༻✧༺═━──━═╝`
+const defaultGlobalNewPackCaption = " `୨ৎ`  pack ˚₊· [click here to add]($link) ·₊˚\n\n `✧˖°`  $count stickers ˖°✧\n\n🐈⠀៹ [t.me/legendasbot](https://t.me/{usernameBot})  ‹"
 
 const defaultFixedPostBuilderPayload = `{"media_type":"photo","media_file_id":"AgACAgEAAxkBAAIN1GoO7mINPlBGs_ydPnmkDPdxeQ8eAAKoC2sbf_d4RIZ9nu_0BSIiAQADAgADeAADOwQ","menu_message_id":0,"prompt_message_id":0,"title":"","body":"<tg-emoji emoji-id=\"5373026167722876724\">🤩</tg-emoji> Cansado de perder tempo editando postagens?\nO <a href=\"http://t.me/LegendasBrBot?start=start\">LegendasBOT</a> resolve isso pra você de forma simples e eficiente <tg-emoji emoji-id=\"5445284980978621387\">🚀</tg-emoji>","footer":"","reactions":"","buttons":[{"text":"🤖 Legendas BOT","url":"http://t.me/LegendasBrBot?start=start","custom_emoji_id":"5296447931627352804"},{"text":"📺 Central de Novidades","url":"https://t.me/LegendasBOTTopic","custom_emoji_id":"5373330964372004748"}],"step":""}`
 
