@@ -76,6 +76,9 @@ func (s *Service) Get(ctx context.Context, key string, dest interface{}) error {
 	}
 
 	client := GetRedisClient()
+	if client == nil {
+		return fmt.Errorf("redis unavailable")
+	}
 
 	data, err := client.Get(ctx, key).Result()
 	if err != nil {
@@ -137,21 +140,95 @@ func (s *Service) InvalidateChannel(ctx context.Context, channelID int64) error 
 	localCache.Delete(key)
 
 	client := GetRedisClient()
-	client.Del(ctx, key)
+	if client != nil {
+		client.Del(ctx, key)
+	}
 
 	// Também limpa o debounce de atualização
 	updateKey := fmt.Sprintf("last_update:channel:%d", channelID)
-	return client.Del(ctx, updateKey).Err()
+	if client != nil {
+		return client.Del(ctx, updateKey).Err()
+	}
+	return nil
+}
+
+type CachedChannelPhoto struct {
+	Data        []byte `json:"data"`
+	ContentType string `json:"content_type"`
+	ETag        string `json:"etag"`
+}
+
+func (s *Service) GetChannelPhoto(ctx context.Context, channelID int64) (*CachedChannelPhoto, error) {
+	key := fmt.Sprintf("channel:photo:v1:%d", channelID)
+
+	// 1. Tenta L1 (Memória local)
+	if val, found := localCache.Get(key); found {
+		if photo, ok := val.(*CachedChannelPhoto); ok {
+			return photo, nil
+		}
+	}
+
+	// 2. Tenta L2 (Redis)
+	client := GetRedisClient()
+	if client == nil {
+		return nil, fmt.Errorf("cache miss")
+	}
+
+	var photo CachedChannelPhoto
+	err := s.Get(ctx, key, &photo)
+	if err == nil {
+		localCache.Set(key, &photo, 30*time.Minute)
+		return &photo, nil
+	}
+
+	return nil, err
+}
+
+func (s *Service) SetChannelPhoto(ctx context.Context, channelID int64, photo *CachedChannelPhoto, ttl time.Duration) error {
+	if photo == nil {
+		return nil
+	}
+	key := fmt.Sprintf("channel:photo:v1:%d", channelID)
+	if ttl <= 0 {
+		ttl = 24 * time.Hour
+	}
+
+	// Salva no L1
+	localCache.Set(key, photo, 30*time.Minute)
+
+	// Salva no L2 (Redis) se disponível
+	client := GetRedisClient()
+	if client == nil {
+		return nil
+	}
+	return s.Set(ctx, key, photo, ttl)
+}
+
+func (s *Service) InvalidateChannelPhoto(ctx context.Context, channelID int64) error {
+	key := fmt.Sprintf("channel:photo:v1:%d", channelID)
+	localCache.Delete(key)
+
+	client := GetRedisClient()
+	if client != nil {
+		return client.Del(ctx, key).Err()
+	}
+	return nil
 }
 
 func (s *Service) Delete(ctx context.Context, key string) error {
 	localCache.Delete(key)
 	client := GetRedisClient()
+	if client == nil {
+		return nil
+	}
 	return client.Del(ctx, key).Err()
 }
 
 func (s *Service) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	client := GetRedisClient()
+	if client == nil {
+		return fmt.Errorf("redis unavailable")
+	}
 
 	data, err := json.Marshal(value)
 	if err != nil {

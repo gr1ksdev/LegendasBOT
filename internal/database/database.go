@@ -163,6 +163,7 @@ func initServerConfig(db *gorm.DB) error {
 		FixedPostBuilderPayload: defaultFixedPostBuilderPayload,
 		GlobalNewPackCaption:    defaultGlobalNewPackCaption,
 		LogRetentionDays:        30,
+		LogsEnabled:             true,
 	}
 
 	if err := db.WithContext(context.Background()).FirstOrCreate(&config, models.ServerConfig{ID: 1}).Error; err != nil {

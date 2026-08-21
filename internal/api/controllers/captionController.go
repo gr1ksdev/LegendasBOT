@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"mime"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/leirbagxis/FreddyBot/internal/api/types"
+	"github.com/leirbagxis/FreddyBot/internal/cache"
 	"github.com/leirbagxis/FreddyBot/internal/container"
 	"github.com/leirbagxis/FreddyBot/pkg/errors"
 	"github.com/mymmrac/telego"
@@ -229,7 +232,7 @@ func downloadTelegramFile(ctx context.Context, client *http.Client, downloadURL 
 	return data, nil
 }
 
-// GetChannelPhotoController busca a foto do canal no servidor sem expor a URL de download do Telegram.
+// GetChannelPhotoController busca a foto do canal no servidor sem expor a URL de download do Telegram, com cache L1/L2 e suporte a ETag/304.
 func (c *CaptionController) GetChannelPhotoController(ctx *gin.Context) {
 	channelIdStr := ctx.Param("channelId")
 	channelId, err := strconv.ParseInt(channelIdStr, 10, 64)
@@ -238,7 +241,29 @@ func (c *CaptionController) GetChannelPhotoController(ctx *gin.Context) {
 		return
 	}
 
+	// 1. Tenta recuperar do cache L1/L2
+	if c.container.CacheService != nil {
+		if cached, err := c.container.CacheService.GetChannelPhoto(ctx.Request.Context(), channelId); err == nil && cached != nil && len(cached.Data) > 0 {
+			if clientETag := ctx.GetHeader("If-None-Match"); clientETag != "" && clientETag == cached.ETag {
+				ctx.Header("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800")
+				ctx.Header("ETag", cached.ETag)
+				ctx.Status(http.StatusNotModified)
+				return
+			}
+
+			ctx.Header("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800")
+			ctx.Header("ETag", cached.ETag)
+			ctx.Data(http.StatusOK, cached.ContentType, cached.Data)
+			return
+		}
+	}
+
+	// 2. Cache miss: buscar via Telegram Bot API
 	bot := c.container.TelegoBot
+	if bot == nil {
+		ctx.Error(errors.New(http.StatusServiceUnavailable, "Serviço do bot indisponível"))
+		return
+	}
 
 	chat, err := bot.GetChat(context.Background(), &telego.GetChatParams{
 		ChatID: telego.ChatID{ID: channelId},
@@ -269,8 +294,34 @@ func (c *CaptionController) GetChannelPhotoController(ctx *gin.Context) {
 
 	contentType := mime.TypeByExtension(filepath.Ext(file.FilePath))
 	if contentType == "" {
-		contentType = "application/octet-stream"
+		contentType = "image/jpeg"
 	}
-	ctx.Header("Cache-Control", "private, max-age=3600")
+
+	// Gerar ETag
+	etag := fmt.Sprintf(`W/"photo-%d-%s"`, channelId, file.FileUniqueID)
+	if file.FileUniqueID == "" {
+		h := sha256.Sum256(data)
+		etag = fmt.Sprintf(`W/"photo-%d-%s"`, channelId, hex.EncodeToString(h[:8]))
+	}
+
+	// Salvar em cache L1/L2 (24h)
+	if c.container.CacheService != nil {
+		cachedPhoto := &cache.CachedChannelPhoto{
+			Data:        data,
+			ContentType: contentType,
+			ETag:        etag,
+		}
+		_ = c.container.CacheService.SetChannelPhoto(ctx.Request.Context(), channelId, cachedPhoto, 24*time.Hour)
+	}
+
+	if clientETag := ctx.GetHeader("If-None-Match"); clientETag != "" && clientETag == etag {
+		ctx.Header("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800")
+		ctx.Header("ETag", etag)
+		ctx.Status(http.StatusNotModified)
+		return
+	}
+
+	ctx.Header("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800")
+	ctx.Header("ETag", etag)
 	ctx.Data(http.StatusOK, contentType, data)
 }

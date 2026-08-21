@@ -51,15 +51,30 @@ type ChannelEventListResult struct {
 }
 
 type ChannelEventService struct {
-	repo *repositories.ChannelEventRepository
+	repo          *repositories.ChannelEventRepository
+	isLogsEnabled func() bool
 }
 
-func NewChannelEventService(repo *repositories.ChannelEventRepository) *ChannelEventService {
-	return &ChannelEventService{repo: repo}
+func NewChannelEventService(repo *repositories.ChannelEventRepository, isLogsEnabled ...func() bool) *ChannelEventService {
+	var enabledFn func() bool
+	if len(isLogsEnabled) > 0 {
+		enabledFn = isLogsEnabled[0]
+	}
+	return &ChannelEventService{
+		repo:          repo,
+		isLogsEnabled: enabledFn,
+	}
+}
+
+func (s *ChannelEventService) SetLogsEnabledFunc(fn func() bool) {
+	s.isLogsEnabled = fn
 }
 
 func (s *ChannelEventService) Record(ctx context.Context, input ChannelEventRecordInput) {
 	if s == nil || s.repo == nil {
+		return
+	}
+	if s.isLogsEnabled != nil && !s.isLogsEnabled() {
 		return
 	}
 	if strings.TrimSpace(input.Source) == "" || strings.TrimSpace(input.EventType) == "" {

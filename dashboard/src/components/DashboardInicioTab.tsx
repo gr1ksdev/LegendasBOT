@@ -12,6 +12,69 @@ import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { PerfLine } from './WaveDivider';
 
+const channelPhotoFailedCache = new Set<number>();
+const channelPhotoLoadedCache = new Set<number>();
+
+function ChannelPhotoAvatar({ channelId, title }: { channelId: number; title: string }) {
+    const [hasError, setHasError] = useState(() => channelPhotoFailedCache.has(channelId));
+    const [isLoaded, setIsLoaded] = useState(() => channelPhotoLoadedCache.has(channelId));
+
+    useEffect(() => {
+        if (channelPhotoFailedCache.has(channelId)) {
+            setHasError(true);
+        } else if (channelPhotoLoadedCache.has(channelId)) {
+            setIsLoaded(true);
+        }
+    }, [channelId]);
+
+    const initial = title?.charAt(0).toUpperCase() || '?';
+
+    if (hasError) {
+        return (
+            <div
+                className="flex items-center justify-center w-16 h-16 rounded-2xl shrink-0 select-none shadow-sm"
+                style={{ background: 'var(--accent-soft)' }}
+            >
+                <span className="text-3xl font-bold" style={{ color: 'var(--accent)' }}>
+                    {initial}
+                </span>
+            </div>
+        );
+    }
+
+    return (
+        <div className="relative w-16 h-16 rounded-2xl shrink-0 overflow-hidden bg-accent/10 shadow-sm">
+            {!isLoaded && (
+                <div
+                    className="absolute inset-0 flex items-center justify-center select-none"
+                    style={{ background: 'var(--accent-soft)' }}
+                >
+                    <span className="text-3xl font-bold opacity-70" style={{ color: 'var(--accent)' }}>
+                        {initial}
+                    </span>
+                </div>
+            )}
+            <img
+                src={`/api/channel/${channelId}/photo`}
+                alt={title}
+                loading="eager"
+                decoding="async"
+                className={`w-full h-full object-cover transition-opacity duration-200 ${
+                    isLoaded ? 'opacity-100' : 'opacity-0'
+                }`}
+                onLoad={() => {
+                    channelPhotoLoadedCache.add(channelId);
+                    setIsLoaded(true);
+                }}
+                onError={() => {
+                    channelPhotoFailedCache.add(channelId);
+                    setHasError(true);
+                }}
+            />
+        </div>
+    );
+}
+
 interface DashboardInicioTabProps {
     channel: Channel;
     getGreeting: () => string;
@@ -129,21 +192,7 @@ export const DashboardInicioTab = memo(({
             {/* Canal */}
             <div className="bg-muted/20 rounded-2xl px-5 py-5">
                 <div className="flex items-center gap-5">
-                    <img
-                        src={`/api/channel/${channel.id}/photo`}
-                        alt={channel.title}
-                        className="w-16 h-16 rounded-2xl shrink-0 object-cover bg-accent/10"
-                        onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                            const fallback = (e.target as HTMLImageElement).nextElementSibling as HTMLElement;
-                            if (fallback) fallback.style.display = 'flex';
-                        }}
-                    />
-                    <div className="flex items-center justify-center w-16 h-16 rounded-2xl shrink-0 hidden" style={{ background: 'var(--accent-soft)' }}>
-                        <span className="text-3xl font-bold" style={{ color: 'var(--accent)' }}>
-                            {channel.title?.charAt(0).toUpperCase() || '?'}
-                        </span>
-                    </div>
+                    <ChannelPhotoAvatar channelId={channel.id} title={channel.title} />
                     <div className="min-w-0 flex-1">
                         <h3 className="text-[19px] font-bold text-foreground truncate leading-tight">{channel.title}</h3>
                         <p className="text-[12px] text-muted-foreground font-mono mt-1">ID {channel.id}</p>

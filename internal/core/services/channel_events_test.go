@@ -112,3 +112,52 @@ func TestChannelEventService_CleanupOld(t *testing.T) {
 		t.Errorf("expected 1 event, got %d", list.Total)
 	}
 }
+
+func TestChannelEventService_LogsDisabled(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to connect database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&models.ChannelEvent{}); err != nil {
+		t.Fatalf("failed to migrate: %v", err)
+	}
+
+	repo := repositories.NewChannelEventRepository(db)
+	enabled := false
+	svc := NewChannelEventService(repo, func() bool { return enabled })
+	ctx := context.Background()
+
+	// Tentativa de registro com logs desativados
+	svc.Record(ctx, ChannelEventRecordInput{
+		ChannelID: 1001,
+		Source:    ChannelEventSourceChannelPost,
+		EventType: "post_received",
+		Status:    ChannelEventStatusSuccess,
+	})
+
+	list, err := svc.ListAdmin(ctx, ChannelEventListFilters{})
+	if err != nil {
+		t.Fatalf("failed to list: %v", err)
+	}
+	if list.Total != 0 {
+		t.Errorf("expected 0 events when logs disabled, got %d", list.Total)
+	}
+
+	// Ativa logs dinamicamente
+	enabled = true
+	svc.Record(ctx, ChannelEventRecordInput{
+		ChannelID: 1001,
+		Source:    ChannelEventSourceChannelPost,
+		EventType: "post_received",
+		Status:    ChannelEventStatusSuccess,
+	})
+
+	list, err = svc.ListAdmin(ctx, ChannelEventListFilters{})
+	if err != nil {
+		t.Fatalf("failed to list: %v", err)
+	}
+	if list.Total != 1 {
+		t.Errorf("expected 1 event when logs enabled, got %d", list.Total)
+	}
+}

@@ -275,6 +275,7 @@ export const updateServerConfig = async (payload: {
     fixedPostBuilderKey: string;
     fixedPostBuilderPayload: string;
     logRetentionDays?: number;
+    logsEnabled?: boolean;
 }) => {
     return apiFetch(`/api/admin/config`, {
         method: 'PUT',

@@ -113,7 +113,7 @@ func TestCreateScheduledPostRejectsForeignChannel(t *testing.T) {
 		t.Fatalf("create channel: %v", err)
 	}
 
-	scheduler := NewSchedulerService(repositories.NewScheduledPostRepository(db), channelRepo, nil, nil)
+	scheduler := NewSchedulerService(repositories.NewScheduledPostRepository(db), channelRepo, nil, nil, nil)
 	if _, err := scheduler.CreateScheduledPost(ctx, 50, 400, `{}`, ScheduleOptions{ScheduleType: "once"}); err != apperrors.ErrForbidden {
 		t.Fatalf("expected forbidden schedule creation, got %v", err)
 	}
@@ -149,7 +149,7 @@ func TestUpdateScheduleTimeRecalculatesRecurringPost(t *testing.T) {
 		t.Fatalf("create schedule: %v", err)
 	}
 
-	scheduler := NewSchedulerService(repositories.NewScheduledPostRepository(db), channelRepo, nil, nil)
+	scheduler := NewSchedulerService(repositories.NewScheduledPostRepository(db), channelRepo, nil, nil, nil)
 	if err := scheduler.UpdateScheduleTime(ctx, post.ID, 70, nil, "23:59"); err != nil {
 		t.Fatalf("update schedule time: %v", err)
 	}

@@ -43,6 +43,7 @@ func (ctrl *ConfigController) UpdateConfig(ctx *gin.Context) {
 		FixedPostBuilderKey     string `json:"fixedPostBuilderKey"`
 		FixedPostBuilderPayload string `json:"fixedPostBuilderPayload"`
 		LogRetentionDays        int    `json:"logRetentionDays"`
+		LogsEnabled             *bool  `json:"logsEnabled"`
 	}
 
 	if err := ctx.ShouldBindJSON(&body); err != nil {
@@ -77,7 +78,15 @@ func (ctrl *ConfigController) UpdateConfig(ctx *gin.Context) {
 
 	previousConfig, _ := ctrl.container.ServerService.GetConfig(ctx)
 
-	config, err := ctrl.container.ServerService.UpdateConfig(ctx, body.Maintenance, body.ForceJoin, body.GlobalDefaultCaption, body.GlobalNewPackCaption, body.FixedPostBuilderEnabled, fixedKey, fixedPayload, body.LogRetentionDays)
+	logsEnabled := true
+	if previousConfig != nil {
+		logsEnabled = previousConfig.LogsEnabled
+	}
+	if body.LogsEnabled != nil {
+		logsEnabled = *body.LogsEnabled
+	}
+
+	config, err := ctrl.container.ServerService.UpdateConfig(ctx, body.Maintenance, body.ForceJoin, body.GlobalDefaultCaption, body.GlobalNewPackCaption, body.FixedPostBuilderEnabled, fixedKey, fixedPayload, body.LogRetentionDays, logsEnabled)
 	if err != nil {
 		logger.Error("API", "Erro ao atualizar configuração no ServerService: %v", err)
 		ctx.Error(errors.New(http.StatusInternalServerError, "Erro ao atualizar configurações"))

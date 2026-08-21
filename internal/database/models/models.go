@@ -12,6 +12,7 @@ type ServerConfig struct {
 	FixedPostBuilderKey     string    `gorm:"default:legendasbot" json:"fixedPostBuilderKey"`
 	FixedPostBuilderPayload string    `gorm:"type:text" json:"fixedPostBuilderPayload"`
 	LogRetentionDays        int       `gorm:"default:30" json:"logRetentionDays"`
+	LogsEnabled             bool      `gorm:"default:true" json:"logsEnabled"`
 	CreatedAt               time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt               time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }

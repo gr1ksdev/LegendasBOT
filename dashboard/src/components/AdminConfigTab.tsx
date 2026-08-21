@@ -24,6 +24,7 @@ export function AdminConfigTab() {
     const [fixedPostKey, setFixedPostKey] = useState('legendasbot');
     const [fixedPostPayload, setFixedPostPayload] = useState('');
     const [logRetentionDays, setLogRetentionDays] = useState(30);
+    const [logsEnabled, setLogsEnabled] = useState(true);
 
     const toast = useToast();
 
@@ -42,6 +43,7 @@ export function AdminConfigTab() {
                         setFixedPostKey(serverData.fixedPostBuilderKey || 'legendasbot');
                         setFixedPostPayload(serverData.fixedPostBuilderPayload || '');
                         setLogRetentionDays(serverData.logRetentionDays || 30);
+                        setLogsEnabled(serverData.logsEnabled !== false);
                     }
                 }
             } catch {
@@ -68,6 +70,7 @@ export function AdminConfigTab() {
                     fixedPostBuilderKey: fixedPostKey,
                     fixedPostBuilderPayload: fixedPostPayload,
                     logRetentionDays: logRetentionDays,
+                    logsEnabled: logsEnabled,
                 });
             } catch {
                 // silent — keep old cache alive
@@ -76,7 +79,7 @@ export function AdminConfigTab() {
 
         const interval = setInterval(refresh, REFRESH_INTERVAL);
         return () => clearInterval(interval);
-    }, [loading, !!config, fixedPostEnabled, logRetentionDays]);
+    }, [loading, !!config, fixedPostEnabled, logRetentionDays, logsEnabled]);
 
     const handleSave = async (overrides: Partial<ServerConfig> = {}) => {
         if (!config) return;
@@ -90,6 +93,7 @@ export function AdminConfigTab() {
             fixedPostBuilderKey: overrides.fixedPostBuilderKey ?? fixedPostKey,
             fixedPostBuilderPayload: overrides.fixedPostBuilderPayload ?? fixedPostPayload,
             logRetentionDays: overrides.logRetentionDays ?? logRetentionDays,
+            logsEnabled: overrides.logsEnabled ?? logsEnabled,
         };
 
         setSaving(true);
@@ -105,6 +109,7 @@ export function AdminConfigTab() {
                     setFixedPostKey(serverData.fixedPostBuilderKey || 'legendasbot');
                     setFixedPostPayload(serverData.fixedPostBuilderPayload || '');
                     setLogRetentionDays(serverData.logRetentionDays || 30);
+                    setLogsEnabled(serverData.logsEnabled !== false);
                 }
                 toast('Configurações atualizadas com sucesso', 'success');
             }
@@ -115,12 +120,18 @@ export function AdminConfigTab() {
         }
     };
 
-    const handleToggle = (field: 'maintence' | 'forceJoin' | 'fixedPostBuilderEnabled') => {
+    const handleToggle = (field: 'maintence' | 'forceJoin' | 'fixedPostBuilderEnabled' | 'logsEnabled') => {
         if (!config) return;
         if (field === 'fixedPostBuilderEnabled') {
             const next = !fixedPostEnabled;
             setFixedPostEnabled(next);
             handleSave({ fixedPostBuilderEnabled: next });
+            return;
+        }
+        if (field === 'logsEnabled') {
+            const next = !logsEnabled;
+            setLogsEnabled(next);
+            handleSave({ logsEnabled: next });
             return;
         }
         handleSave({ [field]: !config[field] });
@@ -202,6 +213,19 @@ export function AdminConfigTab() {
                             />
                             <span className="text-xs text-muted-foreground font-medium">dias</span>
                         </div>
+                    </div>
+                    <div className="admin-config-row flex items-center justify-between gap-4 rounded-lg border border-border p-3">
+                        <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium">Registro de Logs no Banco</p>
+                            <p className="text-xs text-muted-foreground">
+                                {logsEnabled ? 'Auditoria de eventos e postagens ativa (grava no PostgreSQL)' : 'Desativado (economiza operações no banco de dados)'}
+                            </p>
+                        </div>
+                        <Switch
+                            checked={logsEnabled}
+                            onCheckedChange={() => !saving && handleToggle('logsEnabled')}
+                            disabled={saving}
+                        />
                     </div>
                 </CardContent>
                 <CardFooter className="admin-config-footer justify-end gap-2">

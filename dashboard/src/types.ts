@@ -8,6 +8,7 @@ export interface ServerConfig {
   fixedPostBuilderKey: string;
   fixedPostBuilderPayload: string;
   logRetentionDays?: number;
+  logsEnabled?: boolean;
   created_at: string;
   updated_at: string;
 }

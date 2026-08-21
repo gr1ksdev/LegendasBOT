@@ -40,6 +40,8 @@ type SchedulerService struct {
 	cacheService      *cache.Service
 	bot               *telego.Bot
 	autoDeleteService *AutoDeleteService
+	queue             cache.SchedulerQueue
+	wakeCh            chan struct{}
 }
 
 func NewSchedulerService(
@@ -47,12 +49,15 @@ func NewSchedulerService(
 	channelRepo *repositories.ChannelRepository,
 	cacheService *cache.Service,
 	bot *telego.Bot,
+	queue cache.SchedulerQueue,
 ) *SchedulerService {
 	return &SchedulerService{
 		repo:         repo,
 		channelRepo:  channelRepo,
 		cacheService: cacheService,
 		bot:          bot,
+		queue:        queue,
+		wakeCh:       make(chan struct{}, 1),
 	}
 }
 
@@ -60,51 +65,161 @@ func (s *SchedulerService) SetAutoDeleteService(svc *AutoDeleteService) {
 	s.autoDeleteService = svc
 }
 
-func (s *SchedulerService) Start(ctx context.Context) {
-	logger.Info("SCHEDULER", "Scheduler iniciado")
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+// Wake envia um sinal non-blocking para o loop do scheduler recalcular seu timer imediatamente.
+func (s *SchedulerService) Wake() {
+	select {
+	case s.wakeCh <- struct{}{}:
+	default:
+	}
+}
 
-	s.processDuePosts()
+// RebuildQueue recarrega todos os agendamentos pendentes do PostgreSQL e popula a fila Sorted Set do Redis.
+func (s *SchedulerService) RebuildQueue(ctx context.Context) error {
+	// 1. Recuperar claims stale antes de reconstruir
+	if err := s.repo.RecoverStaleClaims(ctx, time.Now().Add(-5*time.Minute)); err != nil {
+		logger.Error("SCHEDULER", "Erro ao recuperar claims stale: %v", err)
+	}
+
+	// 2. Buscar todos os agendamentos pendentes no banco de dados
+	posts, err := s.repo.GetAllPending(ctx)
+	if err != nil {
+		return fmt.Errorf("fetch pending schedules from db: %w", err)
+	}
+
+	if s.queue == nil {
+		return nil
+	}
+
+	// 3. Limpar e repovoar a fila no Redis
+	if err := s.queue.Clear(ctx); err != nil {
+		logger.Warn("SCHEDULER", "Aviso ao limpar fila Redis: %v", err)
+	}
+
+	for _, p := range posts {
+		if err := s.queue.Add(ctx, p.ID, p.NextRunAt); err != nil {
+			logger.Error("SCHEDULER", "Erro ao adicionar post %s à fila Redis: %v", p.ID, err)
+		}
+	}
+
+	logger.Info("SCHEDULER", "Queue rebuilt: %d pending schedules", len(posts))
+	return nil
+}
+
+// Start inicia o loop de processamento event-driven do scheduler.
+func (s *SchedulerService) Start(ctx context.Context) {
+	logger.Info("SCHEDULER", "Scheduler iniciado (event-driven com Redis ZSET)")
 
 	for {
 		select {
 		case <-ctx.Done():
 			logger.Info("SCHEDULER", "Scheduler encerrado")
 			return
-		case <-ticker.C:
-			s.processDuePosts()
+		default:
 		}
-	}
-}
 
-func (s *SchedulerService) processDuePosts() {
-	ctx := context.Background()
-	now := time.Now()
-	if err := s.repo.RecoverStaleClaims(ctx, now.Add(-5*time.Minute)); err != nil {
-		logger.Error("SCHEDULER", "Erro ao recuperar posts interrompidos: %v", err)
-	}
-	posts, err := s.repo.ClaimDuePosts(ctx, now)
-	if err != nil {
-		logger.Error("SCHEDULER", "Erro ao reivindicar posts pendentes: %v", err)
-		return
-	}
+		if s.queue == nil {
+			logger.Error("SCHEDULER", "Fila do scheduler não inicializada")
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(1 * time.Minute):
+				continue
+			}
+		}
 
-	maxPerCycle := 20
-	if len(posts) > maxPerCycle {
-		posts = posts[:maxPerCycle]
-	}
+		// 1. Consultar o próximo item na fila Redis
+		next, err := s.queue.Next(ctx)
+		if err != nil {
+			logger.Error("SCHEDULER", "Erro ao consultar próximo agendamento no Redis: %v", err)
+			// Degradação graciosa: aguarda 3 minutos ou wake/shutdown antes de tentar reconectar/rebuild
+			select {
+			case <-ctx.Done():
+				return
+			case <-s.wakeCh:
+				continue
+			case <-time.After(3 * time.Minute):
+				_ = s.RebuildQueue(ctx)
+				continue
+			}
+		}
 
-	var wg sync.WaitGroup
-	for _, post := range posts {
-		wg.Add(1)
-		p := post
-		go func() {
-			defer wg.Done()
-			s.sendScheduledPost(ctx, &p)
-		}()
+		now := time.Now().UTC()
+
+		// 2. Se a fila estiver vazia, aguardar evento (wake) ou shutdown
+		if next == nil {
+			select {
+			case <-ctx.Done():
+				logger.Info("SCHEDULER", "Scheduler encerrado")
+				return
+			case <-s.wakeCh:
+				continue
+			}
+		}
+
+		// 3. Se o próximo item for no futuro, aguardar até a hora ou wake/shutdown
+		delay := next.ScheduledAt.Sub(now)
+		if delay > 0 {
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				logger.Info("SCHEDULER", "Scheduler encerrado")
+				return
+			case <-s.wakeCh:
+				timer.Stop()
+				continue
+			case <-timer.C:
+				// Hora chegou!
+			}
+		}
+
+		// 4. Buscar todos os agendamentos vencidos até o momento
+		dueItems, err := s.queue.Due(ctx, time.Now().UTC(), 20)
+		if err != nil {
+			logger.Error("SCHEDULER", "Erro ao buscar itens vencidos no Redis: %v", err)
+			continue
+		}
+
+		if len(dueItems) == 0 {
+			continue
+		}
+
+		var wg sync.WaitGroup
+		for _, item := range dueItems {
+			scheduleID := item.ScheduleID
+			// Remover da fila temporariamente para evitar reprocessamento imediato
+			if s.queue != nil {
+				_ = s.queue.Remove(ctx, scheduleID)
+			}
+
+			// Tentar claim atômico no PostgreSQL
+			claimed, claimErr := s.repo.ClaimSingle(ctx, scheduleID, time.Now())
+			if claimErr != nil {
+				logger.Error("SCHEDULER", "Erro ao tentar claim do post %s: %v", scheduleID, claimErr)
+				continue
+			}
+			if !claimed {
+				// Outro worker reivindicou ou o status não é mais pending
+				logger.Bot("⏭️ Post %s não pôde ser reivindicado (não está mais pending ou claim já realizado)", scheduleID)
+				continue
+			}
+
+			// Carregar o post atualizado do PostgreSQL
+			post, getErr := s.repo.GetByID(ctx, scheduleID)
+			if getErr != nil || post == nil {
+				logger.Error("SCHEDULER", "Erro ao carregar post reivindicado %s: %v", scheduleID, getErr)
+				continue
+			}
+
+			wg.Add(1)
+			p := post
+			go func() {
+				defer wg.Done()
+				s.sendScheduledPost(ctx, p)
+			}()
+		}
+		wg.Wait()
 	}
-	wg.Wait()
 }
 
 func (s *SchedulerService) sendScheduledPost(ctx context.Context, post *models.ScheduledPost) {
@@ -157,6 +272,10 @@ func (s *SchedulerService) sendScheduledPost(ctx context.Context, post *models.S
 		if nextRun != nil && (post.RepeatUntil == nil || nextRun.Before(*post.RepeatUntil)) {
 			s.repo.UpdateStatus(ctx, post.ID, "pending")
 			s.repo.UpdateNextRunAt(ctx, post.ID, *nextRun)
+			if s.queue != nil {
+				_ = s.queue.Add(ctx, post.ID, *nextRun)
+			}
+			s.Wake()
 			logger.Info("SCHEDULER", "Post diário %s: próximo envio %s", post.ID, nextRun.Format("02/01 15:04"))
 		} else {
 			logger.Info("SCHEDULER", "Post diário %s finalizado (repeat_until atingido)", post.ID)
@@ -166,6 +285,10 @@ func (s *SchedulerService) sendScheduledPost(ctx context.Context, post *models.S
 		if nextRun != nil && (post.RepeatUntil == nil || nextRun.Before(*post.RepeatUntil)) {
 			s.repo.UpdateStatus(ctx, post.ID, "pending")
 			s.repo.UpdateNextRunAt(ctx, post.ID, *nextRun)
+			if s.queue != nil {
+				_ = s.queue.Add(ctx, post.ID, *nextRun)
+			}
+			s.Wake()
 			logger.Info("SCHEDULER", "Post semanal %s: próximo envio %s", post.ID, nextRun.Format("02/01 15:04"))
 		} else {
 			logger.Info("SCHEDULER", "Post semanal %s finalizado", post.ID)
@@ -175,6 +298,10 @@ func (s *SchedulerService) sendScheduledPost(ctx context.Context, post *models.S
 		if nextRun != nil && (post.RepeatUntil == nil || nextRun.Before(*post.RepeatUntil)) {
 			s.repo.UpdateStatus(ctx, post.ID, "pending")
 			s.repo.UpdateNextRunAt(ctx, post.ID, *nextRun)
+			if s.queue != nil {
+				_ = s.queue.Add(ctx, post.ID, *nextRun)
+			}
+			s.Wake()
 			logger.Info("SCHEDULER", "Post intervalo %s: próximo envio %s (cada %dmin)", post.ID, nextRun.Format("02/01 15:04"), post.IntervalMin)
 		} else {
 			logger.Info("SCHEDULER", "Post intervalo %s finalizado (repeat_until atingido)", post.ID)
@@ -336,7 +463,7 @@ func (s *SchedulerService) calculateNextWeekly(post *models.ScheduledPost) *time
 
 	var days []int
 	if post.ScheduleDays != "" {
-		json.Unmarshal([]byte(post.ScheduleDays), &days)
+		_ = json.Unmarshal([]byte(post.ScheduleDays), &days)
 	}
 	if len(days) == 0 {
 		days = []int{0, 1, 2, 3, 4, 5, 6}
@@ -406,7 +533,11 @@ func (s *SchedulerService) advanceQueue(ctx context.Context, sentPost *models.Sc
 		now := time.Now().In(brazilTZ)
 		hour, min := parseHHMM(sentPost.ScheduleTime)
 		nextRun := time.Date(now.Year(), now.Month(), now.Day()+1, hour, min, 0, 0, brazilTZ).UTC()
-		s.repo.UpdateNextRunAt(ctx, nextPost.ID, nextRun)
+		_ = s.repo.UpdateNextRunAt(ctx, nextPost.ID, nextRun)
+		if s.queue != nil {
+			_ = s.queue.Add(ctx, nextPost.ID, nextRun)
+		}
+		s.Wake()
 		logger.Info("SCHEDULER", "Fila %s: próximo post %s agendado para %s", sentPost.QueueGroupID, nextPost.ID, nextRun.Format("02/01 15:04"))
 	} else if sentPost.LoopQueue {
 		s.resetQueue(ctx, sentPost.QueueGroupID, posts, sentPost.ScheduleTime)
@@ -423,12 +554,16 @@ func (s *SchedulerService) resetQueue(ctx context.Context, queueGroupID string, 
 
 	for i := range posts {
 		if posts[i].Status == "sent" {
-			s.repo.UpdateStatus(ctx, posts[i].ID, "pending")
+			_ = s.repo.UpdateStatus(ctx, posts[i].ID, "pending")
 		}
 	}
 
 	if len(posts) > 0 {
-		s.repo.UpdateNextRunAt(ctx, posts[0].ID, nextRun)
+		_ = s.repo.UpdateNextRunAt(ctx, posts[0].ID, nextRun)
+		if s.queue != nil {
+			_ = s.queue.Add(ctx, posts[0].ID, nextRun)
+		}
+		s.Wake()
 	}
 	logger.Info("SCHEDULER", "Fila %s reiniciada, próximo: %s", queueGroupID, nextRun.Format("02/01 15:04"))
 }
@@ -563,6 +698,12 @@ func (s *SchedulerService) CreateScheduledPost(ctx context.Context, ownerID, cha
 	if err := s.repo.Create(ctx, post); err != nil {
 		return nil, err
 	}
+
+	if s.queue != nil {
+		_ = s.queue.Add(ctx, post.ID, post.NextRunAt)
+	}
+	s.Wake()
+
 	return post, nil
 }
 
@@ -574,7 +715,16 @@ func (s *SchedulerService) CancelScheduledPost(ctx context.Context, id string, o
 	if post.OwnerID != ownerID {
 		return fmt.Errorf("não autorizado")
 	}
-	return s.repo.UpdateStatus(ctx, id, "cancelled")
+	if err := s.repo.UpdateStatus(ctx, id, "cancelled"); err != nil {
+		return err
+	}
+
+	if s.queue != nil {
+		_ = s.queue.Remove(ctx, id)
+	}
+	s.Wake()
+
+	return nil
 }
 
 func (s *SchedulerService) PauseScheduledPost(ctx context.Context, id string, ownerID int64) error {
@@ -585,7 +735,16 @@ func (s *SchedulerService) PauseScheduledPost(ctx context.Context, id string, ow
 	if post.OwnerID != ownerID {
 		return fmt.Errorf("não autorizado")
 	}
-	return s.repo.UpdateStatus(ctx, id, "paused")
+	if err := s.repo.UpdateStatus(ctx, id, "paused"); err != nil {
+		return err
+	}
+
+	if s.queue != nil {
+		_ = s.queue.Remove(ctx, id)
+	}
+	s.Wake()
+
+	return nil
 }
 
 func (s *SchedulerService) ResumeScheduledPost(ctx context.Context, id string, ownerID int64) error {
@@ -596,7 +755,16 @@ func (s *SchedulerService) ResumeScheduledPost(ctx context.Context, id string, o
 	if post.OwnerID != ownerID {
 		return fmt.Errorf("não autorizado")
 	}
-	return s.repo.UpdateStatus(ctx, id, "pending")
+	if err := s.repo.UpdateStatus(ctx, id, "pending"); err != nil {
+		return err
+	}
+
+	if s.queue != nil {
+		_ = s.queue.Add(ctx, post.ID, post.NextRunAt)
+	}
+	s.Wake()
+
+	return nil
 }
 
 func (s *SchedulerService) GetUserSchedules(ctx context.Context, ownerID int64) ([]models.ScheduledPost, error) {
@@ -611,7 +779,16 @@ func (s *SchedulerService) DeleteScheduledPost(ctx context.Context, id string, o
 	if post.OwnerID != ownerID {
 		return fmt.Errorf("não autorizado")
 	}
-	return s.repo.Delete(ctx, id)
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	if s.queue != nil {
+		_ = s.queue.Remove(ctx, id)
+	}
+	s.Wake()
+
+	return nil
 }
 
 func (s *SchedulerService) UpdateScheduleTime(ctx context.Context, id string, ownerID int64, nextRunAt *time.Time, scheduleTime string) error {
@@ -645,7 +822,16 @@ func (s *SchedulerService) UpdateScheduleTime(ctx context.Context, id string, ow
 			}
 		}
 	}
-	return s.repo.UpdateScheduleTime(ctx, id, nextRunAt, scheduleTime)
+	if err := s.repo.UpdateScheduleTime(ctx, id, nextRunAt, scheduleTime); err != nil {
+		return err
+	}
+
+	if nextRunAt != nil && s.queue != nil {
+		_ = s.queue.Add(ctx, id, *nextRunAt)
+	}
+	s.Wake()
+
+	return nil
 }
 
 func (s *SchedulerService) UpdateScheduleInterval(ctx context.Context, id string, ownerID int64, intervalMin int, windowStart, windowEnd string) error {

@@ -48,6 +48,29 @@ func (r *ScheduledPostRepository) GetDuePosts(ctx context.Context, now time.Time
 	return posts, err
 }
 
+// GetAllPending retorna apenas ID e NextRunAt de todos os agendamentos pendentes (usado para reconstruir a fila Redis no startup).
+func (r *ScheduledPostRepository) GetAllPending(ctx context.Context) ([]models.ScheduledPost, error) {
+	var posts []models.ScheduledPost
+	err := r.db.WithContext(ctx).
+		Select("id, next_run_at").
+		Where("status = ?", "pending").
+		Order("next_run_at ASC").
+		Find(&posts).Error
+	return posts, err
+}
+
+// ClaimSingle tenta fazer o claim atômico de um agendamento específico mudando status de pending para processing.
+// Retorna true somente se 1 linha foi afetada.
+func (r *ScheduledPostRepository) ClaimSingle(ctx context.Context, id string, now time.Time) (bool, error) {
+	result := r.db.WithContext(ctx).Model(&models.ScheduledPost{}).
+		Where("id = ? AND status = ?", id, "pending").
+		Updates(map[string]interface{}{"status": "processing", "processing_at": now})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected == 1, nil
+}
+
 // ClaimDuePosts troca pending por processing com uma atualizacao condicional.
 // A comparacao de status no WHERE torna a operacao segura entre processos.
 func (r *ScheduledPostRepository) ClaimDuePosts(ctx context.Context, now time.Time) ([]models.ScheduledPost, error) {

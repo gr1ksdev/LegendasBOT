@@ -137,7 +137,7 @@ func NewAppContainer(db *gorm.DB, telegoClient *telego.Bot) *AppContainer {
 	separatorService := services.NewSeparatorService(separatorRepo)
 	voteService := services.NewVoteService(voteRepo)
 	serverService := services.NewServerService(serverRepo)
-	channelEventService := services.NewChannelEventService(channelEventRepo)
+	channelEventService := services.NewChannelEventService(channelEventRepo, serverService.IsLogsEnabled)
 
 	// Emoji Service
 	emojiService := services.NewEmojiService(emojiRepo, telegoClient)
@@ -170,8 +170,9 @@ func NewAppContainer(db *gorm.DB, telegoClient *telego.Bot) *AppContainer {
 	autoDeleteService := services.NewAutoDeleteService(autoDeleteRepo, telegoClient)
 
 	// Scheduler Service
+	schedulerQueue := cache.NewRedisSchedulerQueue()
 	scheduledPostRepo := repositories.NewScheduledPostRepository(db)
-	schedulerService := services.NewSchedulerService(scheduledPostRepo, channelRepo, cacheService, telegoClient)
+	schedulerService := services.NewSchedulerService(scheduledPostRepo, channelRepo, cacheService, telegoClient, schedulerQueue)
 	schedulerService.SetAutoDeleteService(autoDeleteService)
 
 	postTemplateRepo := repositories.NewUserPostTemplateRepository(db)
@@ -257,6 +258,12 @@ func (c *AppContainer) StartBackground(ctx context.Context) {
 		c.syncFixedPostBuilderSession(ctx)
 		go c.ChannelEventService.StartCleanupScheduler(ctx, c.ServerService.GetLogRetentionDays)
 		c.startBroadcastWorkers(ctx, 5)
+
+		// Reconstruir fila Redis no startup a partir dos registros pendentes no PostgreSQL
+		if err := c.SchedulerService.RebuildQueue(ctx); err != nil {
+			logger.Error("APP", "Erro ao reconstruir fila do scheduler: %v", err)
+		}
+
 		go c.SchedulerService.Start(ctx)
 		go c.AutoDeleteService.Start(ctx)
 		go c.SubscriptionService.StartMaintenance(ctx)
