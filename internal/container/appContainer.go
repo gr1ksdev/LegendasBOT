@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
@@ -60,10 +61,11 @@ type BroadcastButton struct {
 }
 
 type BroadcastJob struct {
-	ChatID   int64
-	Text     string
-	ImageUrl string
-	Buttons  []BroadcastButton
+	ChatID    int64
+	Text      string
+	ImageUrl  string
+	MediaType string
+	Buttons   []BroadcastButton
 }
 
 type AppContainer struct {
@@ -101,6 +103,9 @@ type AppContainer struct {
 	AutoDeleteService          *services.AutoDeleteService
 	PostTemplateService        *services.UserPostTemplateService
 	UserCaptionTemplateService *services.UserCaptionTemplateService
+
+	// ## BACKUP ## \\
+	BackupService *services.BackupService
 
 	// ## CACHE ## \\
 	CacheService   *cache.Service
@@ -167,7 +172,8 @@ func NewAppContainer(db *gorm.DB, telegoClient *telego.Bot) *AppContainer {
 
 	// AutoDelete Service
 	autoDeleteRepo := repositories.NewAutoDeleteRepository(db)
-	autoDeleteService := services.NewAutoDeleteService(autoDeleteRepo, telegoClient)
+	autoDeleteQueue := cache.NewRedisSchedulerQueueWithKey(cache.AutoDeleteQueueKey)
+	autoDeleteService := services.NewAutoDeleteService(autoDeleteRepo, telegoClient, autoDeleteQueue)
 
 	// Scheduler Service
 	schedulerQueue := cache.NewRedisSchedulerQueue()
@@ -204,6 +210,27 @@ func NewAppContainer(db *gorm.DB, telegoClient *telego.Bot) *AppContainer {
 		adminSP = &adminSessionAdapter{svc: adminAccountService}
 	}
 	executorFactory := executor.NewExecutorFactory(botAPIExecutor, mtprotoExecutor, adminSP, provAdapter)
+
+	// Backup Service
+	urlExp, err := time.ParseDuration(config.BackupURLExpiration)
+	if err != nil || urlExp <= 0 {
+		urlExp = 15 * time.Minute
+	}
+	bTimeout, err := time.ParseDuration(config.BackupTimeout)
+	if err != nil || bTimeout <= 0 {
+		bTimeout = 5 * time.Minute
+	}
+	backupConfig := services.BackupConfig{
+		DatabaseURL:         config.DatabaseURL,
+		R2AccountID:         config.R2AccountID,
+		R2AccessKeyID:       config.R2AccessKeyID,
+		R2SecretAccessKey:   config.R2SecretAccessKey,
+		R2BackupBucket:      config.R2BackupBucket,
+		R2BackupPrefix:      config.R2BackupPrefix,
+		BackupURLExpiration: urlExp,
+		BackupTimeout:       bTimeout,
+	}
+	backupService, _ := services.NewBackupService(backupConfig)
 
 	container := &AppContainer{
 		DB:        db,
@@ -243,6 +270,9 @@ func NewAppContainer(db *gorm.DB, telegoClient *telego.Bot) *AppContainer {
 		PostTemplateService:        postTemplateService,
 		UserCaptionTemplateService: userCaptionTemplateService,
 
+		// Backup
+		BackupService: backupService,
+
 		CacheService:   cacheService,
 		SessionManager: cache.NewSessionManager(cacheService),
 	}
@@ -259,9 +289,13 @@ func (c *AppContainer) StartBackground(ctx context.Context) {
 		go c.ChannelEventService.StartCleanupScheduler(ctx, c.ServerService.GetLogRetentionDays)
 		c.startBroadcastWorkers(ctx, 5)
 
-		// Reconstruir fila Redis no startup a partir dos registros pendentes no PostgreSQL
+		// Reconstruir filas Redis no startup a partir dos registros pendentes no PostgreSQL
 		if err := c.SchedulerService.RebuildQueue(ctx); err != nil {
 			logger.Error("APP", "Erro ao reconstruir fila do scheduler: %v", err)
+		}
+
+		if err := c.AutoDeleteService.RebuildQueue(ctx); err != nil {
+			logger.Error("APP", "Erro ao reconstruir fila do autodelete: %v", err)
 		}
 
 		go c.SchedulerService.Start(ctx)
@@ -359,16 +393,21 @@ func (c *AppContainer) broadcastWorker(ctx context.Context) {
 
 			var err error
 			if job.ImageUrl != "" {
-				params := &telego.SendPhotoParams{
-					ChatID:    telego.ChatID{ID: job.ChatID},
-					Photo:     telego.InputFile{URL: job.ImageUrl},
-					Caption:   job.Text,
-					ParseMode: telego.ModeHTML,
+				media := telego.InputFile{FileID: job.ImageUrl}
+				if strings.HasPrefix(job.ImageUrl, "http://") || strings.HasPrefix(job.ImageUrl, "https://") {
+					media = telego.InputFile{URL: job.ImageUrl}
 				}
-				if replyMarkup != nil {
-					params.ReplyMarkup = replyMarkup
+				switch job.MediaType {
+				case "video":
+					params := &telego.SendVideoParams{ChatID: telego.ChatID{ID: job.ChatID}, Video: media, Caption: job.Text, ParseMode: telego.ModeHTML, ReplyMarkup: replyMarkup}
+					_, err = c.TelegoBot.SendVideo(ctx, params)
+				case "animation":
+					params := &telego.SendAnimationParams{ChatID: telego.ChatID{ID: job.ChatID}, Animation: media, Caption: job.Text, ParseMode: telego.ModeHTML, ReplyMarkup: replyMarkup}
+					_, err = c.TelegoBot.SendAnimation(ctx, params)
+				default:
+					params := &telego.SendPhotoParams{ChatID: telego.ChatID{ID: job.ChatID}, Photo: media, Caption: job.Text, ParseMode: telego.ModeHTML, ReplyMarkup: replyMarkup}
+					_, err = c.TelegoBot.SendPhoto(ctx, params)
 				}
-				_, err = c.TelegoBot.SendPhoto(ctx, params)
 			} else {
 				params := &telego.SendMessageParams{
 					ChatID:    telego.ChatID{ID: job.ChatID},

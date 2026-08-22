@@ -27,7 +27,7 @@ RUN go build -ldflags "-X github.com/leirbagxis/FreddyBot/internal/utils.Version
 FROM alpine:3.23
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates && \
+RUN apk add --no-cache ca-certificates postgresql-client && \
     addgroup -S appgroup && adduser -S appuser -G appgroup
 
 COPY --from=builder /app/Release ./Release

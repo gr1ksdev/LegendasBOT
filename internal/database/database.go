@@ -80,33 +80,20 @@ func InitDB() (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get underlying sql.DB: %w", err)
 	}
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
-	sqlDB.SetConnMaxLifetime(time.Hour)
+	sqlDB.SetMaxIdleConns(3)
+	sqlDB.SetMaxOpenConns(10)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
 	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
-	customLogger.DB("⚙️ Pool de conexões configurado (Idle: 10, Open: 100)")
+	customLogger.DB("⚙️ Pool de conexões configurado (Idle: 3, Open: 10)")
 
-	if !isSQLite {
-		customLogger.DB("⚙️ Executando migrações DDL manuais do PostgreSQL...")
-		// Forçar recriação de índices que mudaram de estrutura
-		if err := db.Exec("DROP INDEX IF EXISTS idx_vote_user").Error; err != nil {
-			return nil, fmt.Errorf("drop index idx_vote_user: %w", err)
-		}
+	// Garante que a tabela schema_migrations exista para rastrear DDLs executadas
+	if err := db.AutoMigrate(&models.SchemaMigration{}); err != nil {
+		return nil, fmt.Errorf("auto-migrate schema_migrations: %w", err)
+	}
 
-		// Migrações na tabela scheduled_posts (apenas se a tabela já existir)
-		if err := db.Exec(`DO $$ BEGIN
-			IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='scheduled_posts') THEN
-				IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='scheduled_posts' AND column_name='id' AND data_type='uuid') THEN
-					ALTER TABLE scheduled_posts ALTER COLUMN id TYPE text;
-				END IF;
-
-				IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='scheduled_posts' AND column_name='pin_message') THEN
-					ALTER TABLE scheduled_posts ADD COLUMN pin_message boolean NOT NULL DEFAULT false;
-				END IF;
-			END IF;
-		END $$;`).Error; err != nil {
-			return nil, fmt.Errorf("migrate scheduled_posts DDL: %w", err)
-		}
+	// Executa migrações manuais pendentes apenas 1 vez na vida do banco
+	if err := runManualMigrations(db, isSQLite); err != nil {
+		return nil, fmt.Errorf("executar migrações manuais: %w", err)
 	}
 
 	err = db.AutoMigrate(
@@ -253,3 +240,72 @@ func seedPremiumFeatures(db *gorm.DB) error {
 
 	return nil
 }
+
+// runManualMigrations executa DDLs manuais de forma idempotente, gravando o histórico em schema_migrations.
+func runManualMigrations(db *gorm.DB, isSQLite bool) error {
+	type manualMigration struct {
+		id              string
+		forPostgresOnly bool
+		run             func(db *gorm.DB) error
+	}
+
+	migrations := []manualMigration{
+		{
+			id:              "2026_01_01_drop_legacy_idx_vote_user",
+			forPostgresOnly: true,
+			run: func(db *gorm.DB) error {
+				return db.Exec("DROP INDEX IF EXISTS idx_vote_user").Error
+			},
+		},
+		{
+			id:              "2026_01_01_scheduled_posts_uuid_to_text",
+			forPostgresOnly: true,
+			run: func(db *gorm.DB) error {
+				return db.Exec(`DO $$ BEGIN
+					IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='scheduled_posts') THEN
+						IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='scheduled_posts' AND column_name='id' AND data_type='uuid') THEN
+							ALTER TABLE scheduled_posts ALTER COLUMN id TYPE text;
+						END IF;
+
+						IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='scheduled_posts' AND column_name='pin_message') THEN
+							ALTER TABLE scheduled_posts ADD COLUMN pin_message boolean NOT NULL DEFAULT false;
+						END IF;
+					END IF;
+				END $$;`).Error
+			},
+		},
+	}
+
+	for _, m := range migrations {
+		if m.forPostgresOnly && isSQLite {
+			continue
+		}
+
+		var count int64
+		if err := db.Model(&models.SchemaMigration{}).Where("id = ?", m.id).Count(&count).Error; err != nil {
+			return fmt.Errorf("verificar migração %s: %w", m.id, err)
+		}
+
+		if count > 0 {
+			// Já executada anteriormente, ignora
+			continue
+		}
+
+		customLogger.DB("⚙️ Aplicando migração DDL manual única: %s...", m.id)
+		if err := m.run(db); err != nil {
+			return fmt.Errorf("executar migração %s: %w", m.id, err)
+		}
+
+		record := models.SchemaMigration{
+			ID:        m.id,
+			AppliedAt: time.Now().UTC(),
+		}
+		if err := db.Create(&record).Error; err != nil {
+			return fmt.Errorf("salvar registro da migração %s: %w", m.id, err)
+		}
+		customLogger.DB("✔️ Migração manual %s gravada em schema_migrations", m.id)
+	}
+
+	return nil
+}
+

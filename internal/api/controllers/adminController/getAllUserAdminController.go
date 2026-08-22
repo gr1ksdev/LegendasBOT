@@ -29,6 +29,7 @@ type NoticeRequest struct {
 	TargetID  int64   `json:"targetId"`
 	TargetIDs []int64 `json:"targetIds"`
 	ImageUrl  string  `json:"imageUrl"`
+	MediaType string  `json:"mediaType"`
 	Buttons   []struct {
 		Text  string `json:"text"`
 		Type  string `json:"type"`
@@ -139,10 +140,11 @@ func (c *UsersAdminController) dispatchNotice(notice NoticeRequest) {
 				continue
 			}
 			c.container.BroadcastQueue <- container.BroadcastJob{
-				ChatID:   id,
-				Text:     text,
-				ImageUrl: notice.ImageUrl,
-				Buttons:  buttons,
+				ChatID:    id,
+				Text:      text,
+				ImageUrl:  notice.ImageUrl,
+				MediaType: notice.MediaType,
+				Buttons:   buttons,
 			}
 			sent[id] = true
 		}
@@ -183,10 +185,11 @@ func (c *UsersAdminController) dispatchNotice(notice NoticeRequest) {
 
 		for _, user := range users {
 			c.container.BroadcastQueue <- container.BroadcastJob{
-				ChatID:   user.UserId,
-				Text:     baseText,
-				ImageUrl: notice.ImageUrl,
-				Buttons:  buttons,
+				ChatID:    user.UserId,
+				Text:      baseText,
+				ImageUrl:  notice.ImageUrl,
+				MediaType: notice.MediaType,
+				Buttons:   buttons,
 			}
 		}
 
@@ -199,10 +202,11 @@ func (c *UsersAdminController) dispatchNotice(notice NoticeRequest) {
 
 		for _, channel := range channels {
 			c.container.BroadcastQueue <- container.BroadcastJob{
-				ChatID:   channel.ID,
-				Text:     baseText,
-				ImageUrl: notice.ImageUrl,
-				Buttons:  buttons,
+				ChatID:    channel.ID,
+				Text:      baseText,
+				ImageUrl:  notice.ImageUrl,
+				MediaType: notice.MediaType,
+				Buttons:   buttons,
 			}
 		}
 
@@ -215,10 +219,11 @@ func (c *UsersAdminController) dispatchNotice(notice NoticeRequest) {
 		for _, user := range users {
 			if !sentMap[user.UserId] {
 				c.container.BroadcastQueue <- container.BroadcastJob{
-					ChatID:   user.UserId,
-					Text:     baseText,
-					ImageUrl: notice.ImageUrl,
-					Buttons:  buttons,
+					ChatID:    user.UserId,
+					Text:      baseText,
+					ImageUrl:  notice.ImageUrl,
+					MediaType: notice.MediaType,
+					Buttons:   buttons,
 				}
 				sentMap[user.UserId] = true
 			}
@@ -227,10 +232,11 @@ func (c *UsersAdminController) dispatchNotice(notice NoticeRequest) {
 		for _, channel := range channels {
 			if !sentMap[channel.ID] {
 				c.container.BroadcastQueue <- container.BroadcastJob{
-					ChatID:   channel.ID,
-					Text:     baseText,
-					ImageUrl: notice.ImageUrl,
-					Buttons:  buttons,
+					ChatID:    channel.ID,
+					Text:      baseText,
+					ImageUrl:  notice.ImageUrl,
+					MediaType: notice.MediaType,
+					Buttons:   buttons,
 				}
 				sentMap[channel.ID] = true
 			}

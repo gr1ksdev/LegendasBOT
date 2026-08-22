@@ -1,37 +1,26 @@
 import { useState, useMemo, useTransition, useEffect, Dispatch, SetStateAction, Suspense, lazy } from 'react';
 import { AdminDashboardData, User, Channel, AuditResult } from '../types';
-import { NoticeButton, NoticeTarget, updateUserAdmin, updateUserBlacklist } from '../api';
+import { NoticeButton, NoticeTarget, updateUserAdmin, updateUserBlacklist, fetchServerConfig } from '../api';
+import { AdminNoticeTab } from './AdminNoticeTab';
+import { AdminConfigTab } from './AdminConfigTab';
 
-const AdminNoticeTab = lazy(() => import('./AdminNoticeTab').then(m => ({ default: m.AdminNoticeTab })));
-const AdminConfigTab = lazy(() => import('./AdminConfigTab').then(m => ({ default: m.AdminConfigTab })));
 const AdminAuditTab = lazy(() => import('./AdminAuditTab').then(m => ({ default: m.AdminAuditTab })));
 const AdminLogsTab = lazy(() => import('./AdminLogsTab').then(m => ({ default: m.AdminLogsTab })));
 const AdminMTProtoAccountsTab = lazy(() => import('./AdminMTProtoAccountsTab').then(m => ({ default: m.AdminMTProtoAccountsTab })));
 const AdminPremiumFeaturesTab = lazy(() => import('./AdminPremiumFeaturesTab').then(m => ({ default: m.AdminPremiumFeaturesTab })));
 const AdminSubscriptionsTab = lazy(() => import('./AdminSubscriptionsTab').then(m => ({ default: m.AdminSubscriptionsTab })));
-import { Hash, ArrowLeft, ChevronRight, User as UserIcon, ShieldCheck, UserX, UserCheck, MessageSquare, Calendar, ExternalLink, Users, Radio, Filter, ArrowUpDown, Info, Clock, SortAsc, Tv, Hourglass } from 'lucide-react';
+import { Hash, ArrowLeft, ChevronRight, User as UserIcon, ShieldCheck, UserX, UserCheck, MessageSquare, Calendar, ExternalLink, Users, Radio, Info, Loader2, MoreVertical, Copy, Link2, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
 import { useToast } from './Toast';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { DataTable, Column } from './admin/DataTable';
+import { ConfirmModal } from './ConfirmModal';
 import { StatusBadge } from './admin/StatusBadge';
 import { OperationsOverview } from './admin/OperationsOverview';
 import { AdminPageHeader } from './admin/AdminPageHeader';
 import { useAdminCrmControls } from './admin/AdminCrmContext';
 import { filterAndSortChannels, filterAndSortUsers } from './admin/crmSelectors';
-
-const USER_FILTER_CONFIG: Record<string, { label: string; icon: any }> = {
-  all: { label: 'Todos os Usuários', icon: Users },
-  recent: { label: 'Mais Recentes', icon: Clock },
-  name: { label: 'Nome (A-Z)', icon: SortAsc },
-  channels: { label: 'Mais Canais', icon: Tv },
-  admins: { label: 'Apenas Admins', icon: ShieldCheck },
-  blacklisted: { label: 'Apenas Bloqueados', icon: UserX },
-  'with-channels': { label: 'Com Canais', icon: Tv },
-  'without-channels': { label: 'Sem Canais', icon: Hourglass },
-};
 
 interface AdminDashboardProps {
   adminData: AdminDashboardData;
@@ -47,6 +36,8 @@ interface AdminDashboardProps {
   setNoticeMessage: Dispatch<SetStateAction<string>>;
   noticeImageUrl: string;
   setNoticeImageUrl: Dispatch<SetStateAction<string>>;
+  noticeMediaType: 'photo' | 'video' | 'animation';
+  setNoticeMediaType: Dispatch<SetStateAction<'photo' | 'video' | 'animation'>>;
   noticeTarget: NoticeTarget;
   setNoticeTarget: Dispatch<SetStateAction<NoticeTarget>>;
   noticeTargetId: string;
@@ -76,6 +67,7 @@ export function AdminDashboard({
   onMessageUser,
   noticeMessage, setNoticeMessage,
   noticeImageUrl, setNoticeImageUrl,
+  noticeMediaType, setNoticeMediaType,
   noticeTarget, setNoticeTarget,
   noticeTargetId, setNoticeTargetId,
   noticeButtons, handleAddNoticeButton,
@@ -86,18 +78,30 @@ export function AdminDashboard({
   initialLogsChannelId
 }: AdminDashboardProps) {
   const toast = useToast();
-  const { searchQuery, sortBy, filterBy, setFilterBy, navigateToTab } = useAdminCrmControls();
+  const { searchQuery, setFilterBy, navigateToTab } = useAdminCrmControls();
 
   const [localActiveTab, setLocalActiveTab] = useState(activeTab);
   const [isPending, startTransition] = useTransition();
   const [expandedChannelId, setExpandedChannelId] = useState<number | null>(null);
+  const [channelFilter, setChannelFilter] = useState<'all' | 'with-owner' | 'with-data' | 'recent'>('all');
+  const [channelSort, setChannelSort] = useState<AdminCrmSort>('recent');
+  const [channelsPage, setChannelsPage] = useState(1);
   const [userFilterOption, setUserFilterOption] = useState<string>('all');
+  const [userSortOption, setUserSortOption] = useState<AdminCrmSort>('recent');
+  const [openUserMenu, setOpenUserMenu] = useState<number | null>(null);
+  const [usersPage, setUsersPage] = useState(1);
+  const [listConfirmation, setListConfirmation] = useState<{ user: User; action: 'admin' | 'blacklist' } | null>(null);
 
   const [localUsers, setLocalUsers] = useState<User[]>(adminData.users || []);
 
   useEffect(() => {
     setLocalUsers(adminData.users || []);
   }, [adminData.users]);
+
+  useEffect(() => {
+    // Pré-carrega as configurações do servidor em segundo plano para abertura instantânea da aba
+    fetchServerConfig().catch(() => {});
+  }, []);
 
   useEffect(() => {
     startTransition(() => {
@@ -108,21 +112,43 @@ export function AdminDashboard({
   const usersList = localUsers;
   const channelsList = adminData.channels || [];
   const visibleUsers = useMemo(() => {
-    let fBy: AdminCrmFilter = 'all';
-    let sBy: AdminCrmSort = 'recent';
+    return filterAndSortUsers(usersList, searchQuery, userFilterOption as AdminCrmFilter, userSortOption);
+  }, [usersList, searchQuery, userFilterOption, userSortOption]);
+  const visibleChannels = useMemo(() => {
+    const sorted = filterAndSortChannels(channelsList, searchQuery, channelSort);
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return sorted.filter((channel) => {
+      if (channelFilter === 'with-owner') return Boolean(channel.ownerId);
+      if (channelFilter === 'with-data') return Boolean(channel.defaultCaption?.caption || channel.buttons?.length || channel.customCaptions?.length);
+      if (channelFilter === 'recent') return new Date(channel.created_at).getTime() >= weekAgo;
+      return true;
+    });
+  }, [channelsList, searchQuery, channelFilter, channelSort]);
+  const channelsPerPage = 10;
+  const channelsPageCount = Math.max(1, Math.ceil(visibleChannels.length / channelsPerPage));
+  const paginatedChannels = visibleChannels.slice((channelsPage - 1) * channelsPerPage, channelsPage * channelsPerPage);
 
-    if (userFilterOption === 'recent' || userFilterOption === 'name' || userFilterOption === 'channels') {
-      sBy = userFilterOption as AdminCrmSort;
-    } else {
-      fBy = userFilterOption as AdminCrmFilter;
-    }
+  useEffect(() => setChannelsPage(1), [searchQuery, channelFilter, channelSort]);
+  useEffect(() => {
+    if (channelsPage > channelsPageCount) setChannelsPage(channelsPageCount);
+  }, [channelsPage, channelsPageCount]);
+  const usersPerPage = 10;
+  const usersPageCount = Math.max(1, Math.ceil(visibleUsers.length / usersPerPage));
+  const paginatedUsers = visibleUsers.slice((usersPage - 1) * usersPerPage, usersPage * usersPerPage);
 
-    return filterAndSortUsers(usersList, searchQuery, fBy, sBy);
-  }, [usersList, searchQuery, userFilterOption]);
-  const visibleChannels = useMemo(
-    () => filterAndSortChannels(channelsList, searchQuery, sortBy),
-    [channelsList, searchQuery, sortBy],
-  );
+  useEffect(() => setUsersPage(1), [searchQuery, userFilterOption, userSortOption]);
+  useEffect(() => {
+    if (usersPage > usersPageCount) setUsersPage(usersPageCount);
+  }, [usersPage, usersPageCount]);
+  useEffect(() => {
+    if (openUserMenu === null) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpenUserMenu(null); };
+    document.addEventListener('keydown', closeOnEscape);
+    window.addEventListener('scroll', () => setOpenUserMenu(null), { once: true, passive: true });
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [openUserMenu]);
 
   const adminSelectedUser = useMemo(() =>
     selectedUserId ? usersList.find(u => u.id === selectedUserId) : null,
@@ -130,9 +156,15 @@ export function AdminDashboard({
 
   const setAdminSelectedUser = (user: User | null) => onSelectUser(user ? user.id : null);
 
+  const [isUpdatingAdmin, setIsUpdatingAdmin] = useState(false);
+  const [isUpdatingBlacklist, setIsUpdatingBlacklist] = useState(false);
+  const [confirmAdminOpen, setConfirmAdminOpen] = useState(false);
+  const [confirmBlacklistOpen, setConfirmBlacklistOpen] = useState(false);
+
   // ── User Actions ──
 
   const handleToggleAdmin = async (uid: number) => {
+    setIsUpdatingAdmin(true);
     try {
       const res = await updateUserAdmin(uid);
       if (res.success) {
@@ -142,10 +174,13 @@ export function AdminDashboard({
       }
     } catch (err: any) {
       toast(err.message || "Erro ao atualizar status de admin", "error");
+    } finally {
+      setIsUpdatingAdmin(false);
     }
   };
 
   const handleToggleBlacklist = async (uid: number) => {
+    setIsUpdatingBlacklist(true);
     try {
       const res = await updateUserBlacklist(uid);
       if (res.success) {
@@ -155,6 +190,8 @@ export function AdminDashboard({
       }
     } catch (err: any) {
       toast(err.message || "Erro ao atualizar status de blacklist", "error");
+    } finally {
+      setIsUpdatingBlacklist(false);
     }
   };
 
@@ -170,6 +207,7 @@ export function AdminDashboard({
           navigateToTab('users');
         }}
         onViewUsers={() => navigateToTab('users')}
+        onNavigate={(tab) => navigateToTab(tab)}
         onReviewAlert={(kind) => {
           if (kind === 'blacklisted') setFilterBy('blacklisted');
           if (kind === 'without-channels') setFilterBy('without-channels');
@@ -185,92 +223,182 @@ export function AdminDashboard({
   const renderUserDetail = () => {
     if (!adminSelectedUser) return null;
     const name = adminSelectedUser.first_name || 'Sem nome';
+    const channelCount = adminSelectedUser.channels?.length || 0;
+    const channelCountText = channelCount === 1 ? '1 canal' : `${channelCount} canais`;
+
+    let statusVariant: 'success' | 'danger' | 'accent' = 'success';
+    let statusLabel = 'Ativo';
+
+    if (adminSelectedUser.is_blacklisted) {
+      statusVariant = 'danger';
+      statusLabel = 'Bloqueado';
+    } else if (adminSelectedUser.is_admin) {
+      statusVariant = 'accent';
+      statusLabel = 'Admin';
+    }
+
     return (
       <div className="space-y-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setAdminSelectedUser(null)}
-          className="text-muted-foreground"
-        >
-          <ArrowLeft size={16} className="mr-1.5" /> Voltar para usuários
-        </Button>
+        {/* Back Navigation */}
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setAdminSelectedUser(null)}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-accent hover:text-accent/80 transition-colors py-1 cursor-pointer"
+          >
+            <ArrowLeft size={15} />
+            <span>Voltar para usuários</span>
+          </button>
+        </div>
 
-        <div className="rounded-xl border border-border p-4">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex items-center justify-center size-12 rounded-xl shrink-0" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
-              <UserIcon size={24} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold truncate">{name}</h2>
-                {adminSelectedUser.is_admin && <Badge variant="default" className="text-[10px]">Admin</Badge>}
-                {adminSelectedUser.is_blacklisted && <Badge variant="destructive" className="text-[10px]">Bloqueado</Badge>}
+        {/* User Profile Card */}
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3.5 min-w-0 flex-1">
+              <div className="flex items-center justify-center size-12 rounded-xl shrink-0 bg-accent/15 text-accent border border-accent/20">
+                <UserIcon size={22} />
               </div>
-              <p className="text-xs text-muted-foreground">ID: {adminSelectedUser.id} • {adminSelectedUser.channels?.length || 0} canais</p>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-bold text-foreground truncate">{name}</h2>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate font-medium">
+                  ID: {adminSelectedUser.id} · {channelCountText}
+                </p>
+              </div>
+            </div>
+            <div className="shrink-0">
+              <StatusBadge label={statusLabel} variant={statusVariant} dot size="sm" />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {/* Administrative Actions */}
+          <div className="space-y-2 pt-2 border-t border-white/10">
+            {/* Primary Action: Mensagem de Suporte */}
             <Button
               variant="default"
-              size="sm"
-              className="w-full"
+              className="w-full h-11 rounded-xl text-xs font-bold bg-accent hover:bg-accent/90 text-accent-foreground flex items-center justify-center gap-2 shadow-xs cursor-pointer active:scale-[0.99] transition-all"
               onClick={() => {
                 onMessageUser(adminSelectedUser.id);
                 navigateToTab('notice');
               }}
             >
               <MessageSquare size={16} />
-              Mensagem de Suporte
+              <span>Mensagem de Suporte</span>
             </Button>
+
+            {/* Secondary Action: Tornar Admin / Remover Admin */}
             <Button
-              variant={adminSelectedUser.is_admin ? "secondary" : "default"}
-              size="sm"
-              className="w-full"
-              onClick={() => handleToggleAdmin(adminSelectedUser.id)}
+              variant="outline"
+              className={`w-full h-11 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.99] ${
+                adminSelectedUser.is_admin
+                  ? 'border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400'
+                  : 'border-indigo-500/30 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300'
+              }`}
+              disabled={isUpdatingAdmin}
+              onClick={() => setConfirmAdminOpen(true)}
             >
-              <ShieldCheck size={16} />
-              {adminSelectedUser.is_admin ? "Remover Admin" : "Tornar Admin"}
+              {isUpdatingAdmin ? (
+                <Loader2 size={16} className={`animate-spin ${adminSelectedUser.is_admin ? 'text-amber-400' : 'text-indigo-400'}`} />
+              ) : (
+                <ShieldCheck size={16} className={adminSelectedUser.is_admin ? 'text-amber-400' : 'text-indigo-400'} />
+              )}
+              <span>{adminSelectedUser.is_admin ? "Remover Admin" : "Tornar Admin"}</span>
             </Button>
+
+            {/* Destructive / Restrictive Action: Adicionar à blacklist / Remover da blacklist */}
             <Button
-              variant={adminSelectedUser.is_blacklisted ? "secondary" : "destructive"}
-              size="sm"
-              className="w-full"
-              onClick={() => handleToggleBlacklist(adminSelectedUser.id)}
+              variant="outline"
+              className={`w-full h-11 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.99] ${
+                adminSelectedUser.is_blacklisted
+                  ? 'border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400'
+                  : 'border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-400'
+              }`}
+              disabled={isUpdatingBlacklist}
+              onClick={() => setConfirmBlacklistOpen(true)}
             >
-              {adminSelectedUser.is_blacklisted ? <UserCheck size={16} /> : <UserX size={16} />}
-              {adminSelectedUser.is_blacklisted ? "Remover Blacklist" : "Add Blacklist"}
+              {isUpdatingBlacklist ? (
+                <Loader2 size={16} className="animate-spin text-red-400" />
+              ) : adminSelectedUser.is_blacklisted ? (
+                <UserCheck size={16} className="text-emerald-400" />
+              ) : (
+                <UserX size={16} className="text-red-400" />
+              )}
+              <span>{adminSelectedUser.is_blacklisted ? "Remover da blacklist" : "Adicionar à blacklist"}</span>
             </Button>
           </div>
         </div>
 
-        <div className="space-y-2">
-          <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Canais do Usuário</h3>
+        {/* User Channels Section */}
+        <div className="space-y-2.5 pt-1">
+          <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-0.5">
+            Canais do Usuário
+          </h3>
           {adminSelectedUser.channels && adminSelectedUser.channels.length > 0 ? (
-            adminSelectedUser.channels.map((c: Channel) => (
-              <button
-                key={c.id}
-                className="flex items-center w-full text-left gap-3 rounded-xl border border-border p-3 hover:bg-muted/30 transition-colors"
-                onClick={() => navigateToChannel(c.id)}
-              >
-                <div className="flex items-center justify-center size-9 rounded-lg shrink-0" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
-                  <Hash size={16} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-[13px] font-semibold truncate">{c.title}</h3>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">ID: {c.id}</p>
-                </div>
-                <ChevronRight size={16} className="shrink-0 text-muted-foreground/30" />
-              </button>
-            ))
+            <div className="space-y-2">
+              {adminSelectedUser.channels.map((c: Channel) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="flex items-center w-full text-left gap-3.5 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 active:scale-[0.99] transition-all cursor-pointer shadow-2xs group p-3.5"
+                  onClick={() => navigateToChannel(c.id)}
+                >
+                  <div className="flex items-center justify-center size-10 rounded-xl shrink-0 bg-accent/15 text-accent border border-accent/20 group-hover:bg-accent/25 transition-colors">
+                    <Hash size={18} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-sm font-bold text-foreground truncate">{c.title || 'Canal sem título'}</h4>
+                    <p className="text-xs text-muted-foreground mt-0.5 font-mono">ID: {c.id}</p>
+                  </div>
+                  <ChevronRight size={18} className="shrink-0 text-muted-foreground/40 group-hover:text-muted-foreground group-hover:translate-x-0.5 transition-all" />
+                </button>
+              ))}
+            </div>
           ) : (
-            <div className="flex flex-col items-center py-6 text-muted-foreground rounded-xl border border-border">
-              <Hash size={28} className="opacity-30 mb-2" />
-              <p className="text-[13px] font-medium">Este usuário não possui canais</p>
+            <div className="flex flex-col items-center justify-center py-8 px-4 text-center rounded-2xl border border-white/10 bg-white/5">
+              <div className="flex items-center justify-center size-12 rounded-xl bg-muted/20 text-muted-foreground/40 mb-2.5">
+                <Hash size={24} />
+              </div>
+              <p className="text-sm font-semibold text-foreground">Nenhum canal vinculado</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Este usuário ainda não adicionou canais ao bot.</p>
             </div>
           )}
         </div>
+
+        {/* Administrative Information Notice */}
+        <div className="flex items-start gap-2.5 p-3.5 rounded-xl border border-white/10 bg-white/5 text-muted-foreground">
+          <Info size={16} className="shrink-0 mt-0.5 text-accent/80" />
+          <p className="text-xs leading-relaxed">
+            As alterações feitas aqui são aplicadas imediatamente e refletem no acesso do usuário.
+          </p>
+        </div>
+
+        {/* Modais de Confirmação para Ações Administrativas */}
+        <ConfirmModal
+          open={confirmBlacklistOpen}
+          onClose={() => setConfirmBlacklistOpen(false)}
+          onConfirm={() => handleToggleBlacklist(adminSelectedUser.id)}
+          title={adminSelectedUser.is_blacklisted ? "Remover da blacklist?" : `Adicionar ${name} à blacklist?`}
+          message={
+            adminSelectedUser.is_blacklisted
+              ? "O usuário voltará a ter acesso normal aos recursos e comandos do FreddyBot."
+              : "O usuário poderá perder acesso imediato a todos os recursos do FreddyBot."
+          }
+          confirmText={adminSelectedUser.is_blacklisted ? "Remover" : "Adicionar à blacklist"}
+          danger={!adminSelectedUser.is_blacklisted}
+        />
+
+        <ConfirmModal
+          open={confirmAdminOpen}
+          onClose={() => setConfirmAdminOpen(false)}
+          onConfirm={() => handleToggleAdmin(adminSelectedUser.id)}
+          title={adminSelectedUser.is_admin ? "Remover privilégios de Admin?" : `Tornar ${name} Administrador?`}
+          message={
+            adminSelectedUser.is_admin
+              ? "O usuário deixará de ter acesso ao painel de administração e aos comandos de gestão."
+              : "O usuário terá acesso total ao painel administrativo e comandos restritos do bot."
+          }
+          confirmText={adminSelectedUser.is_admin ? "Remover Admin" : "Tornar Admin"}
+          danger={adminSelectedUser.is_admin}
+        />
       </div>
     );
   };
@@ -278,120 +406,107 @@ export function AdminDashboard({
   // ── Users Tab ──
 
   const renderUsersTab = () => {
+    const totalWithChannels = usersList.filter((user) => (user.channels?.length || 0) > 0).length;
+    const totalAdmins = usersList.filter((user) => user.is_admin).length;
+    const totalBlocked = usersList.filter((user) => user.is_blacklisted).length;
+    const sortLabel = userSortOption === 'name' ? 'Nome A–Z' : userSortOption === 'channels' ? 'Mais canais' : 'Mais recentes';
+    const copyUserId = async (user: User) => {
+      await navigator.clipboard?.writeText(String(user.id));
+      toast('ID copiado', 'success');
+      setOpenUserMenu(null);
+    };
+    const formatCreatedAt = (value?: string) => {
+      if (!value) return '';
+      const date = new Date(value);
+      if (!Number.isFinite(date.getTime())) return '';
+      const now = new Date();
+      const isToday = date.toDateString() === now.toDateString();
+      return isToday
+        ? `Hoje ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+        : date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    };
+
     return (
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            Total de Usuários ({visibleUsers.length})
-          </span>
-          <div className="flex items-center gap-2">
-            {/* Seletor Único de Filtro & Ordenação */}
-            <Select
-              value={userFilterOption}
-              onValueChange={(val) => setUserFilterOption(val)}
-            >
-              <SelectTrigger size="sm" className="min-w-[210px] h-9 text-xs font-bold rounded-xl bg-card text-foreground border-border cursor-pointer shadow-xs">
-                <div className="flex items-center gap-2 truncate">
-                  {(() => {
-                    const cfg = USER_FILTER_CONFIG[userFilterOption] || USER_FILTER_CONFIG.all;
-                    const IconComp = cfg.icon;
-                    return (
-                      <>
-                        <IconComp size={14} className="text-accent shrink-0" />
-                        <span className="text-foreground font-bold">{cfg.label}</span>
-                      </>
-                    );
-                  })()}
-                </div>
-              </SelectTrigger>
-              <SelectContent className="bg-[#12141a] text-slate-100 border border-slate-800 rounded-xl shadow-2xl z-[99999]">
-                <SelectItem value="all" className="text-xs font-medium cursor-pointer py-2">
-                  <div className="flex items-center gap-2">
-                    <Users size={13} className="text-accent shrink-0" />
-                    <span>Todos os Usuários</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="recent" className="text-xs font-medium cursor-pointer py-2">
-                  <div className="flex items-center gap-2">
-                    <Clock size={13} className="text-accent shrink-0" />
-                    <span>Mais Recentes</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="name" className="text-xs font-medium cursor-pointer py-2">
-                  <div className="flex items-center gap-2">
-                    <SortAsc size={13} className="text-accent shrink-0" />
-                    <span>Nome (A-Z)</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="channels" className="text-xs font-medium cursor-pointer py-2">
-                  <div className="flex items-center gap-2">
-                    <Tv size={13} className="text-accent shrink-0" />
-                    <span>Mais Canais</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="admins" className="text-xs font-medium cursor-pointer py-2">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck size={13} className="text-accent shrink-0" />
-                    <span>Apenas Admins</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="blacklisted" className="text-xs font-medium cursor-pointer py-2">
-                  <div className="flex items-center gap-2">
-                    <UserX size={13} className="text-accent shrink-0" />
-                    <span>Apenas Bloqueados</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="with-channels" className="text-xs font-medium cursor-pointer py-2">
-                  <div className="flex items-center gap-2">
-                    <Tv size={13} className="text-accent shrink-0" />
-                    <span>Com Canais</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="without-channels" className="text-xs font-medium cursor-pointer py-2">
-                  <div className="flex items-center gap-2">
-                    <Hourglass size={13} className="text-accent shrink-0" />
-                    <span>Sem Canais</span>
-                  </div>
-                </SelectItem>
-              </SelectContent>
+      <div className="admin-users-page">
+        <section className="admin-users-metrics" aria-label="Resumo dos usuários">
+          <div className="metric-total"><Users size={15} /><strong>{usersList.length}</strong><span>Total de usuários<small>cadastrados</small></span></div>
+          <div className="metric-linked"><Link2 size={15} /><strong>{totalWithChannels}</strong><span>Com canais<small>vinculados</small></span></div>
+          <div className="metric-admin"><ShieldCheck size={15} /><strong>{totalAdmins}</strong><span>Administradores</span></div>
+          <div className="metric-blocked"><UserX size={15} /><strong>{totalBlocked}</strong><span>Bloqueados</span></div>
+        </section>
+
+        <section className="admin-users-filters" aria-labelledby="users-filter-title">
+          <span id="users-filter-title">Filtros</span>
+          <div>
+            <Select value={['all', 'with-channels', 'without-channels'].includes(userFilterOption) ? userFilterOption : 'all'} onValueChange={(val) => setUserFilterOption(val)}>
+              <SelectTrigger aria-label="Escopo dos usuários"><Users size={13} /><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos os Usuários</SelectItem><SelectItem value="with-channels">Com canais</SelectItem><SelectItem value="without-channels">Sem canais</SelectItem></SelectContent>
+            </Select>
+            <Select value={['admins', 'blacklisted'].includes(userFilterOption) ? userFilterOption : 'all'} onValueChange={(val) => setUserFilterOption(val)}>
+              <SelectTrigger aria-label="Status do usuário"><ShieldCheck size={13} /><span>{userFilterOption === 'admins' ? 'Admins' : userFilterOption === 'blacklisted' ? 'Bloqueados' : 'Status'}</span></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos os status</SelectItem><SelectItem value="admins">Administradores</SelectItem><SelectItem value="blacklisted">Bloqueados</SelectItem></SelectContent>
+            </Select>
+            <Select value={userSortOption} onValueChange={(val) => setUserSortOption(val as AdminCrmSort)}>
+              <SelectTrigger aria-label="Ordenação"><SlidersHorizontal size={13} /><span>Mais filtros</span></SelectTrigger>
+              <SelectContent><SelectItem value="recent">Mais recentes</SelectItem><SelectItem value="name">Nome A–Z</SelectItem><SelectItem value="channels">Mais canais</SelectItem></SelectContent>
             </Select>
           </div>
-        </div>
-        {visibleUsers.length === 0 ? (
-          <div className="text-center py-10 text-xs text-muted-foreground border border-border rounded-xl bg-card">
-            Nenhum usuário encontrado com os filtros aplicados.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {visibleUsers.map(user => (
-              <div
-                key={user.id}
-                onClick={() => setAdminSelectedUser(user)}
-                className="flex items-center justify-between p-3 rounded-xl border border-border bg-card hover:bg-muted/30 transition-all cursor-pointer shadow-xs group"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="flex items-center justify-center size-8 rounded-full shrink-0 text-xs font-bold bg-accent/15 text-accent">
-                    {(user.first_name || '?')[0].toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-foreground truncate group-hover:text-accent transition-colors">
-                      {user.first_name || 'Sem nome'}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      ID: {user.id} • {user.channels?.length || 0} canal(is)
-                    </p>
-                  </div>
-                </div>
+        </section>
 
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {user.is_admin && <Badge variant="default" className="text-[9px] px-1.5 py-0.2">Admin</Badge>}
-                  {user.is_blacklisted && <Badge variant="destructive" className="text-[9px] px-1.5 py-0.2">Bloqueado</Badge>}
-                  <ChevronRight size={15} className="text-muted-foreground/40 group-hover:text-foreground transition-colors" />
+        <div className="admin-users-results"><span>{visibleUsers.length} {visibleUsers.length === 1 ? 'resultado encontrado' : 'resultados encontrados'}</span><button type="button" onClick={() => setUserSortOption(userSortOption === 'name' ? 'channels' : userSortOption === 'channels' ? 'recent' : 'name')}>Ordenar: <b>{sortLabel}</b>⌄</button></div>
+
+        {visibleUsers.length === 0 ? (
+          <div className="admin-users-empty"><Users size={22} /><strong>Nenhum usuário encontrado</strong><span>Tente ajustar a busca ou os filtros.</span></div>
+        ) : (
+          <div className="admin-users-list">
+            {openUserMenu !== null && (
+              <button
+                type="button"
+                className="admin-user-menu-backdrop"
+                aria-label="Fechar menu de ações"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setOpenUserMenu(null);
+                }}
+              />
+            )}
+            {paginatedUsers.map(user => (
+              <article key={user.id} className="admin-user-card" onClick={() => setAdminSelectedUser(user)}>
+                <div className="admin-user-avatar">{Array.from((user.first_name || user.username || '?').trim())[0]?.toLocaleUpperCase('pt-BR') || '?'}{!user.is_blacklisted && <i />}</div>
+                <div className="admin-user-card-copy">
+                  <strong>{user.first_name || user.username || 'Sem nome'}</strong>
+                  <div className="admin-user-id"><span>ID: {user.id}</span><button type="button" aria-label={`Copiar ID de ${user.first_name || 'usuário'}`} onClick={(event) => { event.stopPropagation(); copyUserId(user); }}><Copy size={12} /></button></div>
+                  <div className="admin-user-badges">
+                    <span className={user.is_blacklisted ? 'is-blocked' : 'is-active'}>{user.is_blacklisted ? 'Bloqueado' : '● Ativo'}</span>
+                    {user.is_admin && <span className="is-admin">Admin</span>}
+                    <span className="has-channels"><Link2 size={10} /> {user.channels?.length || 0} {(user.channels?.length || 0) === 1 ? 'canal' : 'canais'}</span>
+                  </div>
                 </div>
-              </div>
+                <div className="admin-user-card-side"><time>{formatCreatedAt(user.created_at)}</time><div data-user-actions>
+                  <button type="button" className="admin-user-kebab" aria-label="Abrir ações do usuário" aria-expanded={openUserMenu === user.id} onClick={(event) => { event.stopPropagation(); setOpenUserMenu(openUserMenu === user.id ? null : user.id); }}><MoreVertical size={17} /></button>
+                  {openUserMenu === user.id && <div className="admin-user-actions-menu" onClick={(event) => event.stopPropagation()}>
+                    <button type="button" onClick={() => { setOpenUserMenu(null); setAdminSelectedUser(user); }}><UserIcon size={15} />Ver detalhes</button>
+                    <button type="button" onClick={() => { setOpenUserMenu(null); onMessageUser(user.id); navigateToTab('notice'); }}><MessageSquare size={15} />Mensagem de suporte</button>
+                    <button type="button" onClick={() => { setOpenUserMenu(null); setListConfirmation({ user, action: 'admin' }); }}><ShieldCheck size={15} />{user.is_admin ? 'Remover administrador' : 'Tornar administrador'}</button>
+                    <button type="button" disabled={!user.channels?.length} onClick={() => { setOpenUserMenu(null); setAdminSelectedUser(user); }}><Link2 size={15} />Ver canais vinculados</button>
+                    <button type="button" onClick={() => copyUserId(user)}><Copy size={15} />Copiar ID</button>
+                    <button type="button" className="is-destructive" onClick={() => { setOpenUserMenu(null); setListConfirmation({ user, action: 'blacklist' }); }}><UserX size={15} />{user.is_blacklisted ? 'Remover da blacklist' : 'Adicionar à blacklist'}</button>
+                  </div>}
+                </div></div>
+              </article>
             ))}
           </div>
         )}
+
+        {visibleUsers.length > 0 && <nav className="admin-users-pagination" aria-label="Paginação de usuários"><button type="button" disabled={usersPage === 1} onClick={() => setUsersPage((page) => page - 1)}>‹</button><span>{usersPage}</span><button type="button" disabled={usersPage === usersPageCount} onClick={() => setUsersPage((page) => page + 1)}>›</button></nav>}
+
+        <ConfirmModal open={listConfirmation !== null} onClose={() => setListConfirmation(null)} onConfirm={() => {
+          if (!listConfirmation) return;
+          if (listConfirmation.action === 'admin') handleToggleAdmin(listConfirmation.user.id);
+          else handleToggleBlacklist(listConfirmation.user.id);
+          setListConfirmation(null);
+        }} title={listConfirmation?.action === 'admin' ? (listConfirmation.user.is_admin ? 'Remover privilégios de Admin?' : `Tornar ${listConfirmation.user.first_name || 'usuário'} administrador?`) : (listConfirmation?.user.is_blacklisted ? 'Remover da blacklist?' : `Adicionar ${listConfirmation?.user.first_name || 'usuário'} à blacklist?`)} message={listConfirmation?.action === 'admin' ? 'Esta ação altera o acesso administrativo do usuário ao FreddyBot.' : 'Esta ação altera o acesso do usuário aos recursos do FreddyBot.'} confirmText="Confirmar" danger={listConfirmation?.action === 'blacklist' && !listConfirmation.user.is_blacklisted} />
       </div>
     );
   };
@@ -399,127 +514,82 @@ export function AdminDashboard({
   // ── Channels Tab ──
 
   const renderChannelsTab = () => {
+    const channelsWithMembers = channelsList.filter((channel) => Number((channel as any).subscriberCount || 0) > 0).length;
+    const channelsWithData = channelsList.filter((channel) => channel.defaultCaption?.caption || channel.buttons?.length || channel.customCaptions?.length).length;
+    const latestChannel = [...channelsList].filter((channel) => channel.created_at).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+    const latestDate = latestChannel ? new Date(latestChannel.created_at).toLocaleDateString('pt-BR') : '—';
+    const channelSortLabel = channelSort === 'name' ? 'Nome A–Z' : 'Mais recentes';
+    const copyChannelValue = async (value: string | number, message: string) => {
+      await navigator.clipboard?.writeText(String(value));
+      toast(message, 'success');
+    };
+
     return (
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            Canais Conectados ({visibleChannels.length})
-          </span>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-muted-foreground">Clique no canal para expandir detalhes</span>
+      <div className="admin-channels-page">
+        <section className="admin-channels-metrics" aria-label="Resumo dos canais">
+          <div className="metric-connected"><Radio size={15} /><strong>{channelsList.length}</strong><span>Canais<small>conectados</small></span></div>
+          <div className="metric-members"><Users size={15} /><strong>{channelsWithMembers}</strong><span>Com membros</span></div>
+          <div className="metric-data"><ArrowUpDown size={15} /><strong>{channelsWithData}</strong><span>Com dados</span></div>
+          <div className="metric-recent"><Calendar size={15} /><strong>{latestDate}</strong><span>Mais recente</span></div>
+        </section>
+
+        <section className="admin-channels-filters" aria-labelledby="channels-filter-title">
+          <span id="channels-filter-title">Filtros</span>
+          <div>
+            <Select value={channelFilter === 'all' || channelFilter === 'with-owner' ? channelFilter : 'all'} onValueChange={(value) => setChannelFilter(value as typeof channelFilter)}>
+              <SelectTrigger aria-label="Escopo dos canais"><Radio size={13} /><span>{channelFilter === 'with-owner' ? 'Com proprietário' : 'Todos os Canais'}</span></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos os Canais</SelectItem><SelectItem value="with-owner">Com proprietário</SelectItem></SelectContent>
+            </Select>
+            <Select value={channelFilter === 'with-data' ? 'with-data' : 'all'} onValueChange={(value) => setChannelFilter(value as typeof channelFilter)}>
+              <SelectTrigger aria-label="Status do canal"><Radio size={13} /><span>{channelFilter === 'with-data' ? 'Com dados' : 'Status'}</span></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos os status</SelectItem><SelectItem value="with-data">Com dados</SelectItem></SelectContent>
+            </Select>
+            <Select value={channelFilter === 'recent' ? 'recent' : 'all'} onValueChange={(value) => setChannelFilter(value as typeof channelFilter)}>
+              <SelectTrigger aria-label="Mais filtros"><SlidersHorizontal size={13} /><span>Mais filtros</span></SelectTrigger>
+              <SelectContent><SelectItem value="all">Sem filtro adicional</SelectItem><SelectItem value="recent">Adicionados recentemente</SelectItem></SelectContent>
+            </Select>
           </div>
-        </div>
+        </section>
+
+        <div className="admin-channels-results"><span>{visibleChannels.length} {visibleChannels.length === 1 ? 'canal encontrado' : 'canais encontrados'}</span><button type="button" onClick={() => setChannelSort(channelSort === 'name' ? 'recent' : 'name')}>Ordenar: <b>{channelSortLabel}</b>⌄</button></div>
+
         {visibleChannels.length === 0 ? (
-          <div className="text-center py-10 text-xs text-muted-foreground border border-border rounded-xl bg-card">
-            Nenhum canal encontrado.
-          </div>
+          <div className="admin-channels-empty"><Radio size={23} /><strong>{channelsList.length ? 'Nenhum canal encontrado' : 'Nenhum canal conectado'}</strong><span>{channelsList.length ? 'Tente ajustar a busca ou os filtros.' : 'Quando um canal for vinculado ao FreddyBot, ele aparecerá aqui.'}</span></div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 items-start">
-            {visibleChannels.map(channel => {
+          <div className="admin-channels-list">
+            {paginatedChannels.map(channel => {
               const isExpanded = expandedChannelId === channel.id;
               const ownerUser = usersList.find(u => u.id === channel.ownerId);
+              const addedAt = channel.created_at ? new Date(channel.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Não informado';
 
               return (
-                <div
-                  key={channel.id}
-                  className={`rounded-xl border transition-all shadow-xs overflow-hidden ${
-                    isExpanded
-                      ? 'border-accent/60 bg-card ring-1 ring-accent/20'
-                      : 'border-border bg-card hover:bg-muted/30 cursor-pointer'
-                  }`}
-                >
-                  {/* Cabeçalho do Card */}
-                  <div
+                <article key={channel.id} className={`admin-channel-card ${isExpanded ? 'is-expanded' : ''}`}>
+                  <button
+                    type="button"
+                    className="admin-channel-card-header"
                     onClick={() => setExpandedChannelId(isExpanded ? null : channel.id)}
-                    className="flex items-center justify-between p-3 cursor-pointer group"
+                    aria-expanded={isExpanded}
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="flex items-center justify-center size-8 rounded-lg shrink-0 bg-accent/15 text-accent">
-                        <Radio size={16} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-foreground truncate group-hover:text-accent transition-colors">
-                          {channel.title}
-                        </p>
-                        <p className="text-[10px] font-mono text-muted-foreground">
-                          ID: {channel.id}
-                        </p>
-                      </div>
-                    </div>
+                    <span className="admin-channel-icon"><Radio size={19} /><i /></span>
+                    <span className="admin-channel-identity"><strong>{channel.title || 'Canal sem título'}</strong><small>ID: {channel.id}</small></span>
+                    <ChevronRight size={18} className={isExpanded ? 'is-open' : ''} />
+                  </button>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      {channel.subscriberCount ? (
-                        <Badge variant="secondary" className="text-[9px] font-mono px-1.5 py-0.2">
-                          👥 {channel.subscriberCount}
-                        </Badge>
-                      ) : null}
-                      <ChevronRight
-                        size={16}
-                        className={`text-muted-foreground/50 transition-transform duration-200 ${
-                          isExpanded ? 'rotate-90 text-accent' : ''
-                        }`}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Painel Expansível Inline (Sanfona) */}
                   {isExpanded && (
-                    <div className="px-3 pb-3.5 pt-1 border-t border-border/60 bg-muted/20 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-150">
-                      <div className="grid grid-cols-1 gap-2 text-xs pt-1">
-                        <div className="flex flex-col gap-1 p-2 rounded-lg bg-card/90 border border-border/50">
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
-                            <Radio size={12} className="text-accent" />
-                            ID do Canal
-                          </span>
-                          <span className="font-mono font-bold text-foreground text-xs break-all">
-                            {channel.id}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-1 p-2 rounded-lg bg-card/90 border border-border/50">
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
-                            <UserIcon size={12} className="text-accent" />
-                            Dono do Canal
-                          </span>
-                          <span className="font-semibold text-foreground text-xs leading-tight break-words">
-                            {ownerUser?.first_name || 'Desconhecido'}{' '}
-                            <span className="text-[11px] text-muted-foreground font-mono font-normal">
-                              (ID: {channel.ownerId || 'N/A'})
-                            </span>
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between p-2 rounded-lg bg-card/90 border border-border/50">
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
-                            <Calendar size={12} className="text-accent" />
-                            Adicionado em
-                          </span>
-                          <span className="font-medium text-foreground text-xs font-mono">
-                            {channel.created_at
-                              ? new Date(channel.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                              : 'Não informado'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <Button
-                        size="sm"
-                        className="w-full h-8 rounded-lg text-xs font-bold bg-accent hover:bg-accent/90 text-accent-foreground flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigateToChannel(channel.id);
-                        }}
-                      >
-                        <ExternalLink size={14} />
-                        <span>Ir para Dashboard do Canal</span>
-                      </Button>
+                    <div className="admin-channel-expanded">
+                      <div className="admin-channel-detail"><Radio size={15} /><span><small>ID DO CANAL</small><strong>{channel.id}</strong></span><button type="button" aria-label="Copiar ID do canal" onClick={() => copyChannelValue(channel.id, 'ID do canal copiado')}><Copy size={14} /></button></div>
+                      <div className="admin-channel-detail"><UserIcon size={15} /><span><small>DONO DO CANAL</small><strong>{ownerUser?.first_name || ownerUser?.username || 'Desconhecido'} <em>(ID: {channel.ownerId || 'N/A'})</em></strong></span><button type="button" aria-label="Copiar ID do proprietário" disabled={!channel.ownerId} onClick={() => copyChannelValue(channel.ownerId, 'ID do proprietário copiado')}><Copy size={14} /></button></div>
+                      <div className="admin-channel-detail"><Calendar size={15} /><span><small>ADICIONADO EM</small><strong>{addedAt}</strong></span><button type="button" aria-label="Copiar data de adição" onClick={() => copyChannelValue(addedAt, 'Data copiada')}><Copy size={14} /></button></div>
+                      <Button type="button" className="admin-channel-dashboard-button" onClick={() => navigateToChannel(channel.id)}><ExternalLink size={14} />Ir para Dashboard do Canal</Button>
                     </div>
                   )}
-                </div>
+                </article>
               );
             })}
           </div>
         )}
+
+        {visibleChannels.length > 0 && <nav className="admin-channels-pagination" aria-label="Paginação de canais"><button type="button" disabled={channelsPage === 1} onClick={() => setChannelsPage((page) => page - 1)}>‹</button><span>{channelsPage}</span><button type="button" disabled={channelsPage === channelsPageCount} onClick={() => setChannelsPage((page) => page + 1)}>›</button></nav>}
       </div>
     );
   };
@@ -534,6 +604,8 @@ export function AdminDashboard({
           setNoticeMessage={setNoticeMessage}
           noticeImageUrl={noticeImageUrl}
           setNoticeImageUrl={setNoticeImageUrl}
+          noticeMediaType={noticeMediaType}
+          setNoticeMediaType={setNoticeMediaType}
           noticeTarget={noticeTarget}
           setNoticeTarget={setNoticeTarget}
           noticeTargetId={noticeTargetId}
@@ -570,8 +642,15 @@ export function AdminDashboard({
     <div className={`admin-crm-page ${localActiveTab === 'overview' ? 'is-overview' : ''} ${isPending ? 'is-pending' : ''}`}>
       {localActiveTab !== 'overview' && (
         <AdminPageHeader
-          eyebrow="Painel administrativo"
+          eyebrow="PAINEL ADMINISTRATIVO"
           title={tabCopy[localActiveTab].title}
+          badge={
+            localActiveTab === 'users' ? (
+              <Badge variant="secondary" className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-slate-800/90 text-slate-300 border-slate-700/60 shadow-2xs">
+                {usersList.length}
+              </Badge>
+            ) : undefined
+          }
           description={tabCopy[localActiveTab].description}
         />
       )}
@@ -597,11 +676,7 @@ export function AdminDashboard({
           </Suspense>
         </div>
       )}
-      {localActiveTab === 'notice' && (
-        <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground animate-pulse">Carregando aviso...</div>}>
-          {renderNoticeTab()}
-        </Suspense>
-      )}
+      {localActiveTab === 'notice' && renderNoticeTab()}
       {localActiveTab === 'logs' && (
         <div className="space-y-4">
           <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground animate-pulse">Carregando logs...</div>}>
@@ -611,9 +686,7 @@ export function AdminDashboard({
       )}
       {localActiveTab === 'config' && (
         <div className="space-y-4">
-          <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground animate-pulse">Carregando configurações...</div>}>
-            <AdminConfigTab />
-          </Suspense>
+          <AdminConfigTab />
         </div>
       )}
       {localActiveTab === 'accounts' && (

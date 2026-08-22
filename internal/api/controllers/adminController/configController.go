@@ -29,7 +29,7 @@ func (ctrl *ConfigController) GetConfig(ctx *gin.Context) {
 		return
 	}
 
-	logger.Bot("Configuração recuperada com sucesso: %+v", config)
+	logger.Bot("Configuração recuperada com sucesso")
 	ctx.JSON(http.StatusOK, types.NewSuccessResponse(config))
 }
 

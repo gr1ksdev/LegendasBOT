@@ -79,6 +79,8 @@ func (ctrl *EmojiController) ListEmojiHistory(ctx *gin.Context) {
 		return
 	}
 
+	ctx.Header("Cache-Control", "private, max-age=300")
+
 	ids, err := ctrl.container.EmojiService.ListAccessedEmojiIDs(ctx.Request.Context(), userID)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"ids": []string{}})

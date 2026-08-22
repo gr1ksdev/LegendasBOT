@@ -246,6 +246,7 @@ export interface NoticeRequest {
     targetId?: number;
     targetIds?: number[];
     imageUrl: string;
+    mediaType: 'photo' | 'video' | 'animation';
     buttons: NoticeButton[];
 }
 
@@ -260,10 +261,18 @@ export const sendAdminNotice = async (initData: string, payload: NoticeRequest) 
     });
 };
 
+let cachedServerConfigData: any = null;
+
+export const getCachedServerConfig = () => cachedServerConfigData;
+
 export const fetchServerConfig = async () => {
-    return apiFetch(`/api/admin/config`, {
+    const response = await apiFetch(`/api/admin/config`, {
         method: 'GET',
     });
+    if (response?.success) {
+        cachedServerConfigData = response.data || response.config;
+    }
+    return response;
 };
 
 export const updateServerConfig = async (payload: {
@@ -277,10 +286,14 @@ export const updateServerConfig = async (payload: {
     logRetentionDays?: number;
     logsEnabled?: boolean;
 }) => {
-    return apiFetch(`/api/admin/config`, {
+    const response = await apiFetch(`/api/admin/config`, {
         method: 'PUT',
         body: JSON.stringify(payload),
     });
+    if (response?.success) {
+        cachedServerConfigData = response.data || response.config;
+    }
+    return response;
 };
 
 export const disconnectChannel = async (channelId: number) => {
@@ -529,9 +542,28 @@ export const adminToggleAccount = async (id: string, enabled: boolean) => {
 
 /* ===== Emoji History ===== */
 
+let cachedEmojiHistory: string[] | null = null;
+let emojiHistoryPromise: Promise<string[]> | null = null;
+
+export const getCachedEmojiHistory = (): string[] => cachedEmojiHistory || [];
+
 export const fetchEmojiHistory = async (): Promise<string[]> => {
-    const response = await apiFetch('/api/emoji/history', { method: 'GET' });
-    return response?.ids || [];
+    if (cachedEmojiHistory) return cachedEmojiHistory;
+    if (emojiHistoryPromise) return emojiHistoryPromise;
+
+    emojiHistoryPromise = (async () => {
+        try {
+            const response = await apiFetch('/api/emoji/history', { method: 'GET' });
+            cachedEmojiHistory = response?.ids || [];
+            return cachedEmojiHistory;
+        } catch {
+            return [];
+        } finally {
+            emojiHistoryPromise = null;
+        }
+    })();
+
+    return emojiHistoryPromise;
 };
 
 /* ===== Custom Captions API ===== */

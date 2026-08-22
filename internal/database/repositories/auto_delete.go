@@ -20,6 +20,26 @@ func (r *AutoDeleteRepository) Create(ctx context.Context, item *models.AutoDele
 	return r.db.WithContext(ctx).Create(item).Error
 }
 
+func (r *AutoDeleteRepository) GetAllPending(ctx context.Context) ([]models.AutoDeletePost, error) {
+	var posts []models.AutoDeletePost
+	err := r.db.WithContext(ctx).
+		Where("status = ?", "pending").
+		Order("delete_at ASC").
+		Find(&posts).Error
+	return posts, err
+}
+
+func (r *AutoDeleteRepository) GetByID(ctx context.Context, id uint) (*models.AutoDeletePost, error) {
+	var item models.AutoDeletePost
+	err := r.db.WithContext(ctx).
+		Where("id = ?", id).
+		First(&item).Error
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (r *AutoDeleteRepository) GetDuePosts(ctx context.Context, now time.Time) ([]models.AutoDeletePost, error) {
 	var posts []models.AutoDeletePost
 	err := r.db.WithContext(ctx).
@@ -33,7 +53,7 @@ func (r *AutoDeleteRepository) GetDuePosts(ctx context.Context, now time.Time) (
 func (r *AutoDeleteRepository) MarkDeleted(ctx context.Context, id uint, deletedAt time.Time) error {
 	return r.db.WithContext(ctx).
 		Model(&models.AutoDeletePost{}).
-		Where("id = ?", id).
+		Where("id = ? AND status = ?", id, "pending").
 		Updates(map[string]interface{}{
 			"status":     "deleted",
 			"deleted_at": deletedAt,
@@ -43,7 +63,7 @@ func (r *AutoDeleteRepository) MarkDeleted(ctx context.Context, id uint, deleted
 func (r *AutoDeleteRepository) MarkFailed(ctx context.Context, id uint, lastError string) error {
 	return r.db.WithContext(ctx).
 		Model(&models.AutoDeletePost{}).
-		Where("id = ?", id).
+		Where("id = ? AND status = ?", id, "pending").
 		Updates(map[string]interface{}{
 			"status":     "failed",
 			"last_error": lastError,

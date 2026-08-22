@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { EmojiRenderer } from './EmojiRenderer';
+import { fetchEmojiHistory, getCachedEmojiHistory } from '../api';
 
 interface Props {
   value: string;
@@ -37,16 +38,13 @@ export function RichTextEditor({ value, onChange, rows = 6, placeholder }: Props
   const [linkMode, setLinkMode] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkText, setLinkText] = useState('');
-  const [recentEmojiIds, setRecentEmojiIds] = useState<string[]>([]);
+  const [recentEmojiIds, setRecentEmojiIds] = useState<string[]>(getCachedEmojiHistory());
 
-  // Carrega histórico de emojis do usuário
+  // Carrega histórico de emojis do usuário usando cache compartilhado
   useEffect(() => {
-    fetch('/api/emoji/history', { credentials: 'same-origin' })
-      .then(res => res.json())
-      .then(data => setRecentEmojiIds(data.ids || []))
-      .catch(() => {
-        // Falha silenciosa — emojis recentes são um recurso opcional
-      });
+    fetchEmojiHistory().then(ids => {
+      if (ids && ids.length > 0) setRecentEmojiIds(ids);
+    });
   }, []);
 
   const pushHistory = useCallback((text: string, selStart: number, selEnd: number) => {

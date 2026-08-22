@@ -1,21 +1,31 @@
 package admincontroller
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/leirbagxis/FreddyBot/internal/cache"
 	"github.com/leirbagxis/FreddyBot/internal/container"
 	"github.com/leirbagxis/FreddyBot/pkg/config"
 	"github.com/leirbagxis/FreddyBot/pkg/logger"
 	"github.com/mymmrac/telego"
 )
 
+type cachedMedia struct {
+	contentType string
+	data        []byte
+	cachedAt    time.Time
+}
+
 type MediaController struct {
 	container *container.AppContainer
+	memCache  sync.Map
 }
 
 func NewMediaController(c *container.AppContainer) *MediaController {
@@ -27,6 +37,44 @@ func (c *MediaController) GetMediaPreview(ctx *gin.Context) {
 	if fileID == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "fileId is required"})
 		return
+	}
+
+	etag := fmt.Sprintf("\"%s\"", fileID)
+	ctx.Header("Cache-Control", "public, max-age=31536000, immutable")
+	ctx.Header("ETag", etag)
+
+	if match := ctx.GetHeader("If-None-Match"); match == etag {
+		ctx.Status(http.StatusNotModified)
+		return
+	}
+
+	// 1. MemCache check
+	if val, ok := c.memCache.Load(fileID); ok {
+		cached := val.(cachedMedia)
+		if time.Since(cached.cachedAt) < 24*time.Hour {
+			ctx.Data(http.StatusOK, cached.contentType, cached.data)
+			return
+		}
+		c.memCache.Delete(fileID)
+	}
+
+	// 2. Redis check
+	redisClient := cache.GetRedisClient()
+	redisKey := "media_preview:" + fileID
+	if redisClient != nil {
+		if raw, err := redisClient.Get(ctx.Request.Context(), redisKey).Bytes(); err == nil && len(raw) > 0 {
+			if splitIdx := bytes.IndexByte(raw, '\n'); splitIdx > 0 {
+				ct := string(raw[:splitIdx])
+				d := raw[splitIdx+1:]
+				c.memCache.Store(fileID, cachedMedia{
+					contentType: ct,
+					data:        d,
+					cachedAt:    time.Now(),
+				})
+				ctx.Data(http.StatusOK, ct, d)
+				return
+			}
+		}
 	}
 
 	bot := c.container.TelegoBot
@@ -74,6 +122,17 @@ func (c *MediaController) GetMediaPreview(ctx *gin.Context) {
 	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/octet-stream"
+	}
+
+	// Guardar em memória e Redis
+	c.memCache.Store(fileID, cachedMedia{
+		contentType: contentType,
+		data:        data,
+		cachedAt:    time.Now(),
+	})
+	if redisClient != nil {
+		payload := append([]byte(contentType+"\n"), data...)
+		_ = redisClient.Set(ctx.Request.Context(), redisKey, payload, 7*24*time.Hour).Err()
 	}
 
 	ctx.Data(http.StatusOK, contentType, data)

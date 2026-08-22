@@ -42,6 +42,16 @@ var (
 	MTProtoAppID         int
 	MTProtoAppHash       string
 	MTProtoEncryptionKey string
+
+	// Cloudflare R2 & Backup PostgreSQL
+	DatabaseURL         string
+	R2AccountID         string
+	R2AccessKeyID       string
+	R2SecretAccessKey   string
+	R2BackupBucket      string
+	R2BackupPrefix      string
+	BackupURLExpiration string
+	BackupTimeout       string
 )
 
 func init() {
@@ -134,6 +144,18 @@ func Load() {
 			logger.Warn("CONFIG", "⚠️ MTPROTO_ENCRYPTION_KEY não configurada. Usando SECRET_KEY como fallback para criptografia MTProto.")
 		}
 	}
+
+	DatabaseURL = os.Getenv("DATABASE_URL")
+	if DatabaseURL == "" {
+		DatabaseURL = DatabaseFile
+	}
+	R2AccountID = os.Getenv("R2_ACCOUNT_ID")
+	R2AccessKeyID = os.Getenv("R2_ACCESS_KEY_ID")
+	R2SecretAccessKey = os.Getenv("R2_SECRET_ACCESS_KEY")
+	R2BackupBucket = os.Getenv("R2_BACKUP_BUCKET")
+	R2BackupPrefix = getEnvDefault("R2_BACKUP_PREFIX", "postgres/backups")
+	BackupURLExpiration = getEnvDefault("BACKUP_URL_EXPIRATION", "15m")
+	BackupTimeout = getEnvDefault("BACKUP_TIMEOUT", "5m")
 }
 
 func getEnvDefault(key, fallback string) string {

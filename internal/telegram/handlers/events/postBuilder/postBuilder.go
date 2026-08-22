@@ -175,17 +175,7 @@ func ProcessIncomingContentTelego(ctx *telegohandler.Context, update telego.Upda
 		return handleTextInputTelego(ctx, update, c, activeState)
 	}
 
-	// Se não tiver mídia nem for mensagem encaminhada, ignora (evita interceptar texto/links comuns)
-	if mediaID == "" && update.Message.ForwardOrigin == nil {
-		logger.Bot("PostBuilder: Mensagem comum sem midia nem encaminhamento para o usuario %d. Ignorando.", userID)
-		return nil
-	}
-
-	if mediaType == "" && update.Message.Text != "" {
-		mediaType = "text"
-	}
-
-	// Verificar se é mensagem encaminhada de um canal
+	// Verificar se é mensagem encaminhada de um canal para prompt de adicionar canal
 	if update.Message.ForwardOrigin != nil {
 		if origin, ok := update.Message.ForwardOrigin.(*telego.MessageOriginChannel); ok {
 			channelID := origin.Chat.ID
@@ -203,11 +193,18 @@ func ProcessIncomingContentTelego(ctx *telegohandler.Context, update telego.Upda
 						return addchannel.SendAddChannelPromptTelego(bot, userID, channelID, origin.Chat.Title, update.Message.From.FirstName)
 					}
 				}
-				logger.Bot("PostBuilder: Mensagem encaminhada do canal %d. Bot NAO e admin no canal. Prosseguindo para o PostBuilder.", channelID)
+				logger.Bot("PostBuilder: Mensagem encaminhada do canal %d. Bot NAO e admin no canal.", channelID)
 			} else {
-				logger.Bot("PostBuilder: Mensagem encaminhada do canal %d que JA ESTA configurado no banco. Prosseguindo para o PostBuilder.", channelID)
+				logger.Bot("PostBuilder: Mensagem encaminhada do canal %d que JA ESTA configurado no banco.", channelID)
 			}
 		}
+	}
+
+	// Post Builder é acionado exclusivamente para mídias (fotos, vídeos, animações, áudios, documentos ou stickers).
+	// Mensagens de texto simples ou textos encaminhados/citando canais não devem acionar o Post Builder.
+	if mediaID == "" {
+		logger.Bot("PostBuilder: Mensagem de texto sem mídia recebida para o usuario %d. Ignorando para o PostBuilder.", userID)
+		return nil
 	}
 
 	// Conteúdo/Mídia detectado, oferecer Post Builder

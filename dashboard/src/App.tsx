@@ -106,6 +106,7 @@ const DashboardContent = memo(function DashboardContent() {
   const [adminData, setAdminData] = useState<AdminDashboardData | null>(null);
   const [noticeMessage, setNoticeMessage] = useState('');
   const [noticeImageUrl, setNoticeImageUrl] = useState('');
+  const [noticeMediaType, setNoticeMediaType] = useState<'photo' | 'video' | 'animation'>('photo');
   const [noticeTarget, setNoticeTarget] = useState<NoticeTarget>('all');
   const [noticeTargetId, setNoticeTargetId] = useState<string>('');
   const [noticeButtons, setNoticeButtons] = useState<NoticeButton[]>([]);
@@ -752,6 +753,7 @@ const DashboardContent = memo(function DashboardContent() {
       const payload: NoticeRequest = {
         message: noticeMessage,
         imageUrl: noticeImageUrl,
+        mediaType: noticeMediaType,
         target: noticeTarget,
         targetId: noticeTarget === 'single' ? targetIds[0] : undefined,
         targetIds: noticeTarget === 'user_ids' || noticeTarget === 'channel_ids' ? targetIds : undefined,
@@ -762,6 +764,7 @@ const DashboardContent = memo(function DashboardContent() {
       toast('Broadcast iniciado. O envio será processado em segundo plano.', 'success');
       setNoticeMessage('');
       setNoticeImageUrl('');
+      setNoticeMediaType('photo');
       setNoticeTargetId('');
       setNoticeButtons([]);
     } catch (err: any) {
@@ -769,7 +772,7 @@ const DashboardContent = memo(function DashboardContent() {
     } finally {
       setIsSendingNotice(false);
     }
-  }, [noticeMessage, noticeImageUrl, noticeTarget, noticeTargetId, noticeButtons, parseNoticeTargetIds, toast]);
+  }, [noticeMessage, noticeImageUrl, noticeMediaType, noticeTarget, noticeTargetId, noticeButtons, parseNoticeTargetIds, toast]);
 
   const handleRunAudit = useCallback(async () => {
     setAuditLoading(true);
@@ -970,6 +973,8 @@ const DashboardContent = memo(function DashboardContent() {
             setNoticeMessage={setNoticeMessage}
             noticeImageUrl={noticeImageUrl}
             setNoticeImageUrl={setNoticeImageUrl}
+            noticeMediaType={noticeMediaType}
+            setNoticeMediaType={setNoticeMediaType}
             noticeTarget={noticeTarget}
             setNoticeTarget={setNoticeTarget}
             noticeTargetId={noticeTargetId}
@@ -1037,6 +1042,8 @@ const DashboardContent = memo(function DashboardContent() {
                 setNoticeMessage={setNoticeMessage}
                 noticeImageUrl={noticeImageUrl}
                 setNoticeImageUrl={setNoticeImageUrl}
+                noticeMediaType={noticeMediaType}
+                setNoticeMediaType={setNoticeMediaType}
                 noticeTarget={noticeTarget}
                 setNoticeTarget={setNoticeTarget}
                 noticeTargetId={noticeTargetId}

@@ -9,7 +9,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const SchedulerQueueKey = "scheduler:queue:v1"
+const (
+	SchedulerQueueKey  = "scheduler:queue:v1"
+	AutoDeleteQueueKey = "auto_delete:queue:v1"
+)
 
 type QueueItem struct {
 	ScheduleID  string
@@ -33,6 +36,16 @@ type RedisSchedulerQueue struct {
 func NewRedisSchedulerQueue() *RedisSchedulerQueue {
 	return &RedisSchedulerQueue{
 		key: SchedulerQueueKey,
+	}
+}
+
+// NewRedisSchedulerQueueWithKey permite instanciar uma fila Redis com chave customizada usando o cliente singleton padrão.
+func NewRedisSchedulerQueueWithKey(key string) *RedisSchedulerQueue {
+	if key == "" {
+		key = SchedulerQueueKey
+	}
+	return &RedisSchedulerQueue{
+		key: key,
 	}
 }
 

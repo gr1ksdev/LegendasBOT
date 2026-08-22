@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { EmojiRenderer } from './EmojiRenderer';
+import { fetchEmojiHistory, getCachedEmojiHistory } from '../api';
 
 interface Props {
   onSelect: (emojiId: string) => void;
@@ -7,14 +8,14 @@ interface Props {
 }
 
 export function EmojiPicker({ onSelect, onClose }: Props) {
-  const [ids, setIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initial = getCachedEmojiHistory();
+  const [ids, setIds] = useState<string[]>(initial);
+  const [loading, setLoading] = useState(initial.length === 0);
 
   useEffect(() => {
-    fetch('/api/emoji/history', { credentials: 'same-origin' })
-      .then(res => res.json())
+    fetchEmojiHistory()
       .then(data => {
-        setIds(data.ids || []);
+        setIds(data);
         setLoading(false);
       })
       .catch(() => setLoading(false));

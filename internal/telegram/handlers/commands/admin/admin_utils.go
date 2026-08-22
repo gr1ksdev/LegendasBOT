@@ -4,55 +4,16 @@ import (
 	"context"
 	"fmt"
 	"html"
-	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/leirbagxis/FreddyBot/internal/container"
 	userModes "github.com/leirbagxis/FreddyBot/internal/database/models"
-	"github.com/leirbagxis/FreddyBot/pkg/config"
-	"github.com/leirbagxis/FreddyBot/pkg/logger"
 	"github.com/mymmrac/telego"
 	"github.com/mymmrac/telego/telegohandler"
 )
 
-func GetBackUpHandlerTelego(app *container.AppContainer) telegohandler.Handler {
-	return func(ctx *telegohandler.Context, update telego.Update) error {
-		bot := ctx.Bot()
-		dbPath := config.DatabaseFile
 
-		file, err := os.Open(dbPath)
-		if err != nil {
-			_, _ = bot.SendMessage(context.Background(), &telego.SendMessageParams{
-				ChatID: update.Message.Chat.ChatID(),
-				Text:   fmt.Sprintf("❌ Erro ao abrir banco: %v", err),
-			})
-			return nil
-		}
-		defer file.Close()
-
-		timestamp := time.Now().Format("2006-01-02-15-04-05")
-
-		params := &telego.SendDocumentParams{
-			ChatID: update.Message.Chat.ChatID(),
-			Document: telego.InputFile{
-				File: file,
-			},
-			Caption: fmt.Sprintf("🗂️ Backup gerado em %s", timestamp),
-		}
-
-		_, err = bot.SendDocument(context.Background(), params)
-		if err != nil {
-			logger.Error("ADMIN", "Erro ao enviar backup: %v", err)
-			_, _ = bot.SendMessage(context.Background(), &telego.SendMessageParams{
-				ChatID: update.Message.Chat.ChatID(),
-				Text:   fmt.Sprintf("❌ Erro ao enviar backup: %v", err),
-			})
-		}
-		return nil
-	}
-}
 
 func ToggleMaintenceHandlerTelego(app *container.AppContainer) telegohandler.Handler {
 	return func(ctx *telegohandler.Context, update telego.Update) error {
