@@ -238,13 +238,13 @@ export function AdminDashboard({
     }
 
     return (
-      <div className="space-y-4">
+      <div className="admin-user-detail">
         {/* Back Navigation */}
-        <div className="flex items-center justify-between">
+        <div className="admin-user-detail-back-row">
           <button
             type="button"
             onClick={() => setAdminSelectedUser(null)}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-accent hover:text-accent/80 transition-colors py-1 cursor-pointer"
+            className="admin-user-detail-back"
           >
             <ArrowLeft size={15} />
             <span>Voltar para usuários</span>
@@ -252,54 +252,51 @@ export function AdminDashboard({
         </div>
 
         {/* User Profile Card */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3.5 min-w-0 flex-1">
-              <div className="flex items-center justify-center size-12 rounded-xl shrink-0 bg-accent/15 text-accent border border-accent/20">
-                <UserIcon size={22} />
+        <section className="admin-user-detail-panel">
+          <div className="admin-user-detail-identity">
+            <div className="admin-user-detail-person">
+              <div className="admin-user-detail-avatar">
+                <UserIcon size={20} />
+                {!adminSelectedUser.is_blacklisted && <i aria-hidden="true" />}
               </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="text-base font-bold text-foreground truncate">{name}</h2>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate font-medium">
+              <div className="admin-user-detail-copy">
+                <h2>{name}</h2>
+                <p>
                   ID: {adminSelectedUser.id} · {channelCountText}
                 </p>
               </div>
             </div>
-            <div className="shrink-0">
+            <div className="admin-user-detail-status">
               <StatusBadge label={statusLabel} variant={statusVariant} dot size="sm" />
             </div>
           </div>
 
           {/* Administrative Actions */}
-          <div className="space-y-2 pt-2 border-t border-white/10">
+          <div className="admin-user-detail-actions">
             {/* Primary Action: Mensagem de Suporte */}
             <Button
               variant="default"
-              className="w-full h-11 rounded-xl text-xs font-bold bg-accent hover:bg-accent/90 text-accent-foreground flex items-center justify-center gap-2 shadow-xs cursor-pointer active:scale-[0.99] transition-all"
+              className="admin-user-action admin-user-action-support"
               onClick={() => {
                 onMessageUser(adminSelectedUser.id);
                 navigateToTab('notice');
               }}
             >
-              <MessageSquare size={16} />
+              <MessageSquare size={15} />
               <span>Mensagem de Suporte</span>
             </Button>
 
             {/* Secondary Action: Tornar Admin / Remover Admin */}
             <Button
               variant="outline"
-              className={`w-full h-11 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.99] ${
-                adminSelectedUser.is_admin
-                  ? 'border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400'
-                  : 'border-indigo-500/30 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300'
-              }`}
+              className={`admin-user-action admin-user-action-admin ${adminSelectedUser.is_admin ? 'is-remove' : ''}`}
               disabled={isUpdatingAdmin}
               onClick={() => setConfirmAdminOpen(true)}
             >
               {isUpdatingAdmin ? (
-                <Loader2 size={16} className={`animate-spin ${adminSelectedUser.is_admin ? 'text-amber-400' : 'text-indigo-400'}`} />
+                <Loader2 size={15} className="animate-spin" />
               ) : (
-                <ShieldCheck size={16} className={adminSelectedUser.is_admin ? 'text-amber-400' : 'text-indigo-400'} />
+                <ShieldCheck size={15} />
               )}
               <span>{adminSelectedUser.is_admin ? "Remover Admin" : "Tornar Admin"}</span>
             </Button>
@@ -307,48 +304,44 @@ export function AdminDashboard({
             {/* Destructive / Restrictive Action: Adicionar à blacklist / Remover da blacklist */}
             <Button
               variant="outline"
-              className={`w-full h-11 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.99] ${
-                adminSelectedUser.is_blacklisted
-                  ? 'border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400'
-                  : 'border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-400'
-              }`}
+              className={`admin-user-action admin-user-action-blacklist ${adminSelectedUser.is_blacklisted ? 'is-restore' : ''}`}
               disabled={isUpdatingBlacklist}
               onClick={() => setConfirmBlacklistOpen(true)}
             >
               {isUpdatingBlacklist ? (
-                <Loader2 size={16} className="animate-spin text-red-400" />
+                <Loader2 size={15} className="animate-spin" />
               ) : adminSelectedUser.is_blacklisted ? (
-                <UserCheck size={16} className="text-emerald-400" />
+                <UserCheck size={15} />
               ) : (
-                <UserX size={16} className="text-red-400" />
+                <UserX size={15} />
               )}
               <span>{adminSelectedUser.is_blacklisted ? "Remover da blacklist" : "Adicionar à blacklist"}</span>
             </Button>
           </div>
-        </div>
+        </section>
 
         {/* User Channels Section */}
-        <div className="space-y-2.5 pt-1">
-          <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-0.5">
+        <section className="admin-user-detail-channels">
+          <h3>
             Canais do Usuário
           </h3>
           {adminSelectedUser.channels && adminSelectedUser.channels.length > 0 ? (
-            <div className="space-y-2">
+            <div className="admin-user-channel-list">
               {adminSelectedUser.channels.map((c: Channel) => (
                 <button
                   key={c.id}
                   type="button"
-                  className="flex items-center w-full text-left gap-3.5 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 active:scale-[0.99] transition-all cursor-pointer shadow-2xs group p-3.5"
+                  className="admin-user-channel"
                   onClick={() => navigateToChannel(c.id)}
                 >
-                  <div className="flex items-center justify-center size-10 rounded-xl shrink-0 bg-accent/15 text-accent border border-accent/20 group-hover:bg-accent/25 transition-colors">
-                    <Hash size={18} />
+                  <div className="admin-user-channel-icon">
+                    <Hash size={17} />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <h4 className="text-sm font-bold text-foreground truncate">{c.title || 'Canal sem título'}</h4>
-                    <p className="text-xs text-muted-foreground mt-0.5 font-mono">ID: {c.id}</p>
+                  <div className="admin-user-channel-copy">
+                    <h4>{c.title || 'Canal sem título'}</h4>
+                    <p>ID: {c.id}</p>
                   </div>
-                  <ChevronRight size={18} className="shrink-0 text-muted-foreground/40 group-hover:text-muted-foreground group-hover:translate-x-0.5 transition-all" />
+                  <ChevronRight size={16} />
                 </button>
               ))}
             </div>
@@ -361,15 +354,15 @@ export function AdminDashboard({
               <p className="text-xs text-muted-foreground mt-0.5">Este usuário ainda não adicionou canais ao bot.</p>
             </div>
           )}
-        </div>
+        </section>
 
         {/* Administrative Information Notice */}
-        <div className="flex items-start gap-2.5 p-3.5 rounded-xl border border-white/10 bg-white/5 text-muted-foreground">
-          <Info size={16} className="shrink-0 mt-0.5 text-accent/80" />
-          <p className="text-xs leading-relaxed">
+        <aside className="admin-user-detail-notice">
+          <Info size={15} />
+          <p>
             As alterações feitas aqui são aplicadas imediatamente e refletem no acesso do usuário.
           </p>
-        </div>
+        </aside>
 
         {/* Modais de Confirmação para Ações Administrativas */}
         <ConfirmModal
