@@ -18,7 +18,8 @@ func HandlerTelego(c *container.AppContainer) telegohandler.Handler {
 
 		bot := ctx.Bot()
 		text, kb := parser.GetMessageTelego("start", map[string]string{
-			"firstName": utils.RemoveHTMLTags(update.CallbackQuery.From.FirstName),
+			"firstName":   utils.RemoveHTMLTags(update.CallbackQuery.From.FirstName),
+			"botUsername": bot.Username(),
 		})
 
 		params := &telego.EditMessageTextParams{
@@ -83,7 +84,8 @@ func CheckSubscriptionHandlerTelego(c *container.AppContainer) telegohandler.Han
 
 		// Se entrou, mostra o start normal
 		text, kb := parser.GetMessageTelego("start", map[string]string{
-			"firstName": utils.RemoveHTMLTags(update.CallbackQuery.From.FirstName),
+			"firstName":   utils.RemoveHTMLTags(update.CallbackQuery.From.FirstName),
+			"botUsername": bot.Username(),
 		})
 
 		params := &telego.EditMessageTextParams{
