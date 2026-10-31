@@ -23,15 +23,10 @@
 - name: cafe
   type: command
   text: |
-    <b>☕ Apoie o projeto</b>
+    ☕ <b>Apoie o projeto</b>
     
-    O FreddyBot é gratuito e se mantém com a ajuda de quem gosta do projeto.
-    
-    Sua doação ajuda a pagar a <b>VPS</b>, o domínio e a manter o bot online 24h por dia.
-    
-    <b>Qualquer valor ajuda 💙</b>
-    
-    Clique no botão abaixo para apoiar:
+    Ajude-nos com os custos operacionais para que o projeto
+    continue ativo e gratuito para todos 💙
   buttons:
     - - text: "☕ Apoie o projeto"
         url: "https://t.me/{botUsername}/cafe"
