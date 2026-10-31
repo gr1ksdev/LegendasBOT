@@ -16,6 +16,7 @@ import (
 	callbackStart "github.com/leirbagxis/FreddyBot/internal/telegram/handlers/callbacks/start"
 	callbackVote "github.com/leirbagxis/FreddyBot/internal/telegram/handlers/callbacks/vote"
 	"github.com/leirbagxis/FreddyBot/internal/telegram/handlers/commands/admin"
+	commandCafe "github.com/leirbagxis/FreddyBot/internal/telegram/handlers/commands/cafe"
 	"github.com/leirbagxis/FreddyBot/internal/telegram/handlers/commands/help"
 	commandStart "github.com/leirbagxis/FreddyBot/internal/telegram/handlers/commands/start"
 	"github.com/leirbagxis/FreddyBot/internal/telegram/handlers/commands/suporte"
@@ -47,6 +48,8 @@ func LoadHandlersTelegoWithBH(bh *telegohandler.BotHandler, c *container.AppCont
 
 	// Commands
 	bh.Handle(commandStart.HandlerTelego(c), telegohandler.CommandEqual("start"))
+	bh.Handle(commandCafe.HandlerTelego(c), telegohandler.CommandEqual("cafe"))
+	bh.Handle(commandCafe.HandlerTelego(c), telegohandler.CommandEqual("doacao"))
 	bh.Handle(help.HandlerTelego(c), telegohandler.CommandEqual("help"))
 	bh.Handle(suporte.HandlerTelego(c), telegohandler.CommandEqual("ouvidoria"))
 	bh.Handle(tutorial.HandlerTelego(c), telegohandler.CommandEqual("tutorial"))

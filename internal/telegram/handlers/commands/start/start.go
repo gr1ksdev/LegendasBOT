@@ -2,10 +2,13 @@ package start
 
 import (
 	"context"
+	"strings"
 
 	"github.com/leirbagxis/FreddyBot/internal/container"
+	"github.com/leirbagxis/FreddyBot/internal/telegram/handlers/commands/cafe"
 	"github.com/leirbagxis/FreddyBot/internal/utils"
 	"github.com/leirbagxis/FreddyBot/pkg/config"
+	"github.com/leirbagxis/FreddyBot/pkg/logger"
 	"github.com/leirbagxis/FreddyBot/pkg/parser"
 	"github.com/mymmrac/telego"
 	"github.com/mymmrac/telego/telegohandler"
@@ -31,6 +34,12 @@ func HandlerTelego(c *container.AppContainer) telegohandler.Handler {
 					MessageID: update.Message.MessageID,
 				},
 			})
+			return nil
+		}
+
+		// Deep link: /start cafe, /start doacao, etc.
+		if isDonationPayload(update.Message.Text) {
+			cafe.Send(bot, update.Message.Chat.ChatID(), update.Message.MessageID)
 			return nil
 		}
 
@@ -99,7 +108,8 @@ func HandlerTelego(c *container.AppContainer) telegohandler.Handler {
 		firstName := utils.RemoveHTMLTags(update.Message.From.FirstName)
 
 		text, kb := parser.GetMessageTelego("start", map[string]string{
-			"firstName": firstName,
+			"firstName":   firstName,
+			"botUsername": bot.Username(),
 		})
 
 		params := &telego.SendMessageParams{
@@ -115,8 +125,25 @@ func HandlerTelego(c *container.AppContainer) telegohandler.Handler {
 			params.ReplyMarkup = kb
 		}
 
-		_, _ = bot.SendMessage(context.Background(), params)
+		if _, err := bot.SendMessage(context.Background(), params); err != nil {
+			logger.Error("BOT", "erro ao enviar /start para %d: %v", userID, err)
+		}
 
 		return nil
+	}
+}
+
+// isDonationPayload detecta deep links como /start cafe e /start doacao.
+func isDonationPayload(text string) bool {
+	fields := strings.Fields(text)
+	if len(fields) < 2 {
+		return false
+	}
+
+	switch strings.ToLower(fields[1]) {
+	case "cafe", "doacao", "donation", "apoiar", "apoie":
+		return true
+	default:
+		return false
 	}
 }

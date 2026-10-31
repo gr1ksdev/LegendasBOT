@@ -12,10 +12,33 @@
     - - text: "Meu Perfil"
         callback_data: "profile-info"
         custom_emoji: "5334882760735598374"
+    - - text: "☕ Apoie o projeto"
+        url: "https://t.me/{botUsername}/cafe"
+        style: "success"
     - - text: "ℹ️ Sobre"
         callback_data: "about"
       - text: "🆘 Como Usar"
         callback_data: "help"
+
+- name: cafe
+  type: command
+  text: |
+    <b>☕ Apoie o projeto</b>
+    
+    O FreddyBot é gratuito e se mantém com a ajuda de quem gosta do projeto.
+    
+    Sua doação ajuda a pagar a <b>VPS</b>, o domínio e a manter o bot online 24h por dia.
+    
+    <b>Qualquer valor ajuda 💙</b>
+    
+    Clique no botão abaixo para apoiar:
+  buttons:
+    - - text: "☕ Apoie o projeto"
+        url: "https://t.me/{botUsername}/cafe"
+        style: "success"
+    - - text: "Início"
+        callback_data: "start"
+        custom_emoji: "5465226866321268133"
 
 - name: profile-info
   type: callback
@@ -76,6 +99,8 @@
     
     <tg-emoji emoji-id="5445284980978621387">🚀</tg-emoji> Este bot foi criado para facilitar a adição de <b>legendas automáticas</b> em postagens de canais, tornando a gestão de conteúdo mais eficiente e dinâmica.
     
+    ☕ <b>Apoie o projeto:</b> sua doação ajuda a manter a VPS e o bot online.
+    
     📢 Para aprender a configurar, consulte a aba <a href='tg://user?id={botId}'>Ajuda</a>!
   buttons:
     - - text: "Início"
@@ -84,6 +109,9 @@
       - text: "Ajuda"
         callback_data: "help"
         custom_emoji: "5467666648263564704"
+    - - text: "☕ Apoie o projeto"
+        url: "https://t.me/{botUsername}/cafe"
+        style: "success"
 
 - name: profile-user-channels
   text: |

@@ -19,11 +19,11 @@ func HandlerTelego(c *container.AppContainer) telegohandler.Handler {
 		}
 
 		bot := ctx.Bot()
-		user, _ := bot.GetMe(context.Background())
 		text, kb := parser.GetMessageTelego("about", map[string]string{
-			"ownerUser":  "@SuporteLegendas",
-			"botVersion": utils.Version,
-			"botId":      fmt.Sprintf("%d", user.ID),
+			"ownerUser":   "@SuporteLegendas",
+			"botVersion":  utils.Version,
+			"botId":       fmt.Sprintf("%d", bot.ID()),
+			"botUsername": bot.Username(),
 		})
 
 		params := &telego.EditMessageTextParams{
